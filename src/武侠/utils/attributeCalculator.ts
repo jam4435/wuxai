@@ -2,6 +2,7 @@
  * 属性计算模块
  * 负责根据初始属性、境界、功法计算战斗属性和资源属性
  */
+import type { InitialAttributes } from '../types';
 
 // ============ 常量定义 ============
 
@@ -55,57 +56,6 @@ export const REALM_IMPLIED_BONUS: Record<string, number> = {
 };
 
 // ============ 类型定义 ============
-
-/**
- * 玩家初始属性（4维）
- * 用于玩家角色的开局属性设置
- */
-export interface PlayerInitialAttributes {
-  臂力: number;
-  根骨: number;
-  机敏: number;
-  洞察: number;
-}
-
-/**
- * 角色初始属性（5维）
- * 用于NPC角色的属性定义，比玩家多一个悟性
- */
-export interface CharacterInitialAttributes {
-  臂力: number;
-  根骨: number;
-  机敏: number;
-  悟性: number;
-  洞察: number;
-}
-
-/**
- * 当前属性（7维）
- * 用于玩家的实时属性显示，包含所有可成长属性
- */
-export interface CurrentAttributes {
-  臂力: number;
-  根骨: number;
-  机敏: number;
-  悟性: number;
-  风姿: number;
-  福缘: number;
-  洞察: number;
-}
-
-/**
- * 通用初始属性（兼容旧代码）
- * @deprecated 请使用 PlayerInitialAttributes 或 CharacterInitialAttributes
- */
-export interface InitialAttributes {
-  臂力: number;
-  根骨: number;
-  机敏: number;
-  悟性?: number;  // 玩家可选，角色必填
-  风姿?: number;  // 已废弃，仅用于兼容
-  福缘?: number;  // 已废弃，仅用于兼容
-  洞察: number;
-}
 
 export interface CombatAttributes {
   臂力: number;
@@ -240,50 +190,4 @@ export function calculateAllAttributes(
   const resources = calculateResources(combat.根骨, martialArts, major);
 
   return { combat, resources };
-}
-
-/**
- * 将英文属性名转换为中文初始属性
- */
-export function convertToChineseInitialAttributes(attrs: {
-  brawn?: number;
-  root?: number;
-  agility?: number;
-  savvy?: number;
-  charisma?: number;
-  luck?: number;
-  insight?: number;
-}): InitialAttributes {
-  return {
-    臂力: attrs.brawn ?? 10,
-    根骨: attrs.root ?? 10,
-    机敏: attrs.agility ?? 10,
-    悟性: attrs.savvy ?? 10,
-    风姿: attrs.charisma ?? 10,
-    福缘: attrs.luck ?? 0,
-    洞察: attrs.insight ?? 10,
-  };
-}
-
-/**
- * 将中文初始属性转换为英文
- */
-export function convertToEnglishInitialAttributes(attrs: InitialAttributes): {
-  brawn: number;
-  root: number;
-  agility: number;
-  savvy: number;
-  charisma: number;
-  luck: number;
-  insight: number;
-} {
-  return {
-    brawn: attrs.臂力,
-    root: attrs.根骨,
-    agility: attrs.机敏,
-    savvy: attrs.悟性 ?? 10,
-    charisma: attrs.风姿 ?? 10,
-    luck: attrs.福缘 ?? 0,
-    insight: attrs.洞察,
-  };
 }
