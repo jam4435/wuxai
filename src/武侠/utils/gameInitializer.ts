@@ -7,12 +7,12 @@ import type {
   AppearanceTemplate,
   AttributePointCost,
   InitialAttributes,
-  TalentTier,
+  OriginItemInfo,
   OriginOption,
   RealmLevel,
-  OriginCategory,
-  OriginItemInfo,
+  TalentTier,
 } from '../types';
+import { ATTRIBUTE_NAMES } from '../types';
 import {
   calculateAllAttributes,
   type InitialAttributes as ChineseInitialAttributes,
@@ -153,8 +153,7 @@ export interface MartialArtOption {
   traits: Record<string, string>;
 }
 
-export const REALM_CULTIVATION_MAP: Record<RealmLevel, number> =
-  realmSystemData.realmCultivationMap;
+export const REALM_CULTIVATION_MAP: Record<RealmLevel, number> = realmSystemData.realmCultivationMap;
 
 export const REALM_LEVELS: RealmLevel[] = realmSystemData.realmLevels as RealmLevel[];
 
@@ -219,13 +218,13 @@ export interface NewGameFormData {
 }
 
 export const DEFAULT_ATTRIBUTES: InitialAttributes = {
-  brawn: 6,
-  root: 6,
-  agility: 6,
-  savvy: 6,
-  insight: 6,
-  charisma: 6,
-  luck: 0,
+  臂力: 6,
+  根骨: 6,
+  机敏: 6,
+  悟性: 6,
+  洞察: 6,
+  风姿: 6,
+  福缘: 0,
 };
 
 export const TOTAL_ATTRIBUTE_POINTS = 62;
@@ -302,11 +301,11 @@ export function generateVariableData(formData: NewGameFormData): Record<string, 
   }
 
   const chineseInitialAttrs: ChineseInitialAttributes = {
-    臂力: initialAttributes.brawn,
-    根骨: initialAttributes.root,
-    机敏: initialAttributes.agility,
-    悟性: initialAttributes.savvy,
-    洞察: initialAttributes.insight,
+    臂力: initialAttributes.臂力,
+    根骨: initialAttributes.根骨,
+    机敏: initialAttributes.机敏,
+    悟性: initialAttributes.悟性,
+    洞察: initialAttributes.洞察,
   };
 
   const { combat, resources } = calculateAllAttributes(chineseInitialAttrs, realm, martialArtsForCalc);
@@ -433,16 +432,16 @@ export async function createOpeningStoryMessage(formData: NewGameFormData): Prom
     const openingLine = getRandomOpeningLine();
     const variableInsertContent = generateOpeningMessage(formData);
     const openingFloorMessage = `${openingLine}\n\n${variableInsertContent}`;
-    
+
     await createChatMessages([{ role: 'assistant', message: openingFloorMessage }], { refresh: 'none' });
-    
+
     const variableData = generateVariableData(formData);
     eventEmit('era:insertByObject', variableData);
-    
+
     await new Promise<void>(resolve => eventOnce('era:writeDone', resolve));
-    
+
     initializeGlobal('GameInitialized', { timestamp: Date.now(), formData });
-    
+
     return { success: true, content: openingLine };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -462,25 +461,19 @@ export function validateAttributes(attributes: InitialAttributes): { valid: bool
   }
 
   for (const [key, value] of Object.entries(attributes)) {
-    if (key !== 'luck' && value < MIN_ATTRIBUTE_VALUE) {
-      return { valid: false, message: `${getAttributeName(key)} 不能低于 ${MIN_ATTRIBUTE_VALUE}` };
+    if (key !== '福缘' && value < MIN_ATTRIBUTE_VALUE) {
+      return {
+        valid: false,
+        message: `${ATTRIBUTE_NAMES[key as keyof InitialAttributes]} 不能低于 ${MIN_ATTRIBUTE_VALUE}`,
+      };
     }
     if (value > MAX_ATTRIBUTE_VALUE) {
-      return { valid: false, message: `${getAttributeName(key)} 不能超过 ${MAX_ATTRIBUTE_VALUE}` };
+      return {
+        valid: false,
+        message: `${ATTRIBUTE_NAMES[key as keyof InitialAttributes]} 不能超过 ${MAX_ATTRIBUTE_VALUE}`,
+      };
     }
   }
 
   return { valid: true };
-}
-
-function getAttributeName(key: string): string {
-  const names: Record<string, string> = {
-    brawn: '臂力',
-    root: '根骨',
-    agility: '机敏',
-    savvy: '悟性',
-    charisma: '风姿',
-    luck: '福缘',
-  };
-  return names[key] || key;
 }
