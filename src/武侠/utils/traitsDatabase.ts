@@ -470,149 +470,149 @@ export const CHARACTER_TRAITS: Omit<CharacterTrait, 'id'>[] = [
   {
     name: '肌肉萎缩',
     description: '肌肉严重萎缩，毫无力量可言。',
-    attributeThreshold: { attribute: 'brawn', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '臂力', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '手无缚鸡',
     description: '力气极小，连抓一只鸡的力气都没有。',
-    attributeThreshold: { attribute: 'brawn', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '臂力', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '天生神力',
     description: '天生就有远超常人的力量。',
-    attributeThreshold: { attribute: 'brawn', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '臂力', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '霸王扛鼎',
     description: '力能扛鼎，堪比古之霸王。',
-    attributeThreshold: { attribute: 'brawn', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '臂力', minValue: 17 }, // 强力正面
   },
   // 根骨 (root) - 范围 [0, 20]
   {
     name: '命若悬丝',
     description: '身体极度虚弱，性命如同悬着的丝线般脆弱。',
-    attributeThreshold: { attribute: 'root', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '根骨', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '经脉淤塞',
     description: '经脉部分堵塞，内息运转不畅。',
-    attributeThreshold: { attribute: 'root', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '根骨', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '龙精虎猛',
     description: '精力旺盛，体魄强健如龙虎。',
-    attributeThreshold: { attribute: 'root', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '根骨', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '武骨天成',
     description: '天生一副适合练武的绝佳根骨。',
-    attributeThreshold: { attribute: 'root', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '根骨', minValue: 17 }, // 强力正面
   },
   // 机敏 (agility) - 范围 [0, 20]
   {
     name: '反应迟缓',
     description: '神经反应极度缓慢，难以应对突发状况。',
-    attributeThreshold: { attribute: 'agility', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '机敏', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '笨手笨脚',
     description: '动作协调性差，显得笨拙。',
-    attributeThreshold: { attribute: 'agility', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '机敏', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '动若脱兔',
     description: '行动迅捷，像受惊的兔子一样敏捷。',
-    attributeThreshold: { attribute: 'agility', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '机敏', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '浮光掠影',
     description: '身法快如浮光掠影，常人难以捕捉其踪迹。',
-    attributeThreshold: { attribute: 'agility', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '机敏', minValue: 17 }, // 强力正面
   },
   // 洞察 (insight) - 范围 [0, 20]
   {
     name: '五感俱衰',
     description: '视觉、听觉、嗅觉、味觉、触觉全面衰退。',
-    attributeThreshold: { attribute: 'insight', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '洞察', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '视而不见',
     description: '观察力差，常常忽略眼前的细节。',
-    attributeThreshold: { attribute: 'insight', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '洞察', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '明察秋毫',
     description: '目光敏锐，能看清秋天鸟兽新换的细毛。',
-    attributeThreshold: { attribute: 'insight', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '洞察', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '洞若观火',
     description: '对事物的观察和理解如同看火一样透彻。',
-    attributeThreshold: { attribute: 'insight', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '洞察', minValue: 17 }, // 强力正面
   },
   // 悟性 (savvy) - 范围 [0, 20]
   {
     name: '浑浑噩噩',
     description: '头脑昏沉，对任何事物都无法理解。',
-    attributeThreshold: { attribute: 'savvy', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '悟性', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '榆木脑袋',
     description: '思路僵化，难以开窍，学习新事物很慢。',
-    attributeThreshold: { attribute: 'savvy', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '悟性', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '过目不忘',
     description: '记忆力超群，看过一遍就不会忘记。',
-    attributeThreshold: { attribute: 'savvy', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '悟性', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '玲珑七窍',
     description: '心思机敏，聪慧异常，通晓事理。',
-    attributeThreshold: { attribute: 'savvy', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '悟性', minValue: 17 }, // 强力正面
   },
   // 风姿 (charisma) - 范围 [0, 20]
   {
     name: '面目可憎',
     description: '相貌丑陋，令人心生厌恶。',
-    attributeThreshold: { attribute: 'charisma', minValue: 0, maxValue: 1 }, // 严重负面
+    attributeThreshold: { attribute: '风姿', minValue: 0, maxValue: 1 }, // 严重负面
   },
   {
     name: '獐头鼠目',
     description: '长相猥琐，给人留下不佳的印象。',
-    attributeThreshold: { attribute: 'charisma', minValue: 2, maxValue: 5 }, // 中等负面
+    attributeThreshold: { attribute: '风姿', minValue: 2, maxValue: 5 }, // 中等负面
   },
   {
     name: '玉树临风',
     description: '形容人像玉树一样潇洒，风度翩翩。',
-    attributeThreshold: { attribute: 'charisma', minValue: 13, maxValue: 16 }, // 中等正面
+    attributeThreshold: { attribute: '风姿', minValue: 13, maxValue: 16 }, // 中等正面
   },
   {
     name: '绝代风华',
     description: '风采才貌冠绝当世，无人能及。',
-    attributeThreshold: { attribute: 'charisma', minValue: 17 }, // 强力正面
+    attributeThreshold: { attribute: '风姿', minValue: 17 }, // 强力正面
   },
   // 福缘 (luck) - 范围 [-6, 14]，基础值 0
   // 严重负面：-6 ~ -5，中等负面：-4 ~ -1，中等正面：7 ~ 10，强力正面：11+
   {
     name: '天煞孤星',
     description: '命中注定会给周围的人带来灾祸，孤苦一生。',
-    attributeThreshold: { attribute: 'luck', minValue: -6, maxValue: -5 }, // 严重负面
+    attributeThreshold: { attribute: '福缘', minValue: -6, maxValue: -5 }, // 严重负面
   },
   {
     name: '霉运缠身',
     description: '运气非常差，时常遇到倒霉的事情。',
-    attributeThreshold: { attribute: 'luck', minValue: -4, maxValue: -1 }, // 中等负面
+    attributeThreshold: { attribute: '福缘', minValue: -4, maxValue: -1 }, // 中等负面
   },
   {
     name: '吉星高照',
     description: '吉祥之星高高照耀，运气很好。',
-    attributeThreshold: { attribute: 'luck', minValue: 7, maxValue: 10 }, // 中等正面
+    attributeThreshold: { attribute: '福缘', minValue: 7, maxValue: 10 }, // 中等正面
   },
   {
     name: '天命所归',
     description: '上天所预先决定的，众望所归，是命运的宠儿。',
-    attributeThreshold: { attribute: 'luck', minValue: 11 }, // 强力正面
+    attributeThreshold: { attribute: '福缘', minValue: 11 }, // 强力正面
   },
 ];
 
