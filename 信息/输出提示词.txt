@@ -6,22 +6,19 @@
 # {{user}}数据
 <%
 // 去引号的紧凑JSON格式，节省token
-function toCompact(obj, indent = 0) {
-  const pad = '  '.repeat(indent);
-  const padChild = '  '.repeat(indent + 1);
+function toCompact(obj) {
   if (obj === null || obj === undefined) return 'null';
   if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
   if (typeof obj === 'string') return obj.includes(',') || obj.includes(':') || obj.includes('\n') ? `"${obj}"` : obj;
   if (Array.isArray(obj)) {
     if (obj.length === 0) return '[]';
-    const items = obj.map(v => padChild + toCompact(v, indent + 1));
-    return '[\n' + items.join(',\n') + '\n' + pad + ']';
+    return '[' + obj.map(v => toCompact(v)).join(',') + ']';
   }
   const entries = Object.entries(obj)
     .filter(([k]) => k !== '$meta' && k !== '$template')
-    .map(([k, v]) => padChild + k + ': ' + toCompact(v, indent + 1));
+    .map(([k, v]) => k + ':' + toCompact(v));
   if (entries.length === 0) return '{}';
-  return '{\n' + entries.join(',\n') + '\n' + pad + '}';
+  return '{' + entries.join(',') + '}';
 }
 
 const p = variables.stat_data.user数据;
