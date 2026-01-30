@@ -20,24 +20,24 @@ export interface LocalChatMessage {
 
 // "初始属性"
 export interface InitialAttributes {
-  brawn: number; // 臂力
-  root: number; // 根骨
-  agility: number; // 机敏
-  savvy: number; // 悟性
-  insight: number; // 洞察
-  charisma: number; // 风姿
-  luck: number; // 福缘
+  臂力: number;
+  根骨: number;
+  机敏: number;
+  悟性: number;
+  洞察: number;
+  风姿: number;
+  福缘: number;
 }
 
 // "属性" (Current stats)
 export interface CurrentAttributes {
   hp: number; // 气血
   mp: number; // 内力
-  brawn: number; // 臂力
-  root: number; // 根骨
-  agility: number; // 机敏
-  savvy: number; // 悟性
-  insight: number; // 洞察
+  臂力: number;
+  根骨: number;
+  机敏: number;
+  悟性: number;
+  洞察: number;
 }
 
 // "武功" template structure (基础结构)
@@ -180,26 +180,26 @@ export interface FormValidationResult {
  * 属性名称映射
  */
 export const ATTRIBUTE_NAMES: Record<keyof InitialAttributes, string> = {
-  brawn: '臂力',
-  root: '根骨',
-  agility: '机敏',
-  savvy: '悟性',
-  insight: '洞察',
-  charisma: '风姿',
-  luck: '福缘',
+  臂力: '臂力',
+  根骨: '根骨',
+  机敏: '机敏',
+  悟性: '悟性',
+  洞察: '洞察',
+  风姿: '风姿',
+  福缘: '福缘',
 };
 
 /**
  * 属性描述
  */
 export const ATTRIBUTE_DESCRIPTIONS: Record<keyof InitialAttributes, string> = {
-  brawn: '力量与体魄，影响近战伤害和负重',
-  root: '根基与体质，影响气血上限和恢复',
-  agility: '身法与反应，影响闪避和出手速度',
-  savvy: '悟性与理解，影响武学修炼速度',
-  insight: '洞察与感知，影响功法精进消耗',
-  charisma: '风姿与气度，影响人际交往',
-  luck: '福缘与运势，影响随机事件结果',
+  臂力: '力量与体魄，影响近战伤害和负重',
+  根骨: '根基与体质，影响气血上限和恢复',
+  机敏: '身法与反应，影响闪避和出手速度',
+  悟性: '悟性与理解，影响武学修炼速度',
+  洞察: '洞察与感知，影响功法精进消耗',
+  风姿: '风姿与气度，影响人际交往',
+  福缘: '福缘与运势，影响随机事件结果',
 };
 
 // ============================================
