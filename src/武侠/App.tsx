@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import ChatInput from './components/ChatInput';
 import FullscreenButton from './components/FullscreenButton';
 import GameContent from './components/GameContent';
+import { Icons } from './components/Icons';
+import Modal from './components/Modal';
+import NewGameSetup from './components/NewGameSetup';
 import {
   CharacterPanel,
   EventsPanel,
@@ -10,15 +13,21 @@ import {
   MartialArtsPanel,
   SocialPanel
 } from './components/panels';
-import { Icons } from './components/Icons';
-import Modal from './components/Modal';
-import NewGameSetup from './components/NewGameSetup';
 import SettingsPanel from './components/SettingsPanel';
 import SplashScreen from './components/SplashScreen';
 import StartScreen from './components/StartScreen';
 import StatusToast from './components/StatusToast';
+import {
+  useDebugLogs,
+  useEventListeners,
+  useGameState,
+  useMessageHandler,
+  usePageFlow,
+  useToast,
+} from './hooks';
 import { ActivePanel } from './types';
 import { createOpeningStoryMessage, type NewGameFormData } from './utils/gameInitializer';
+import { gameLogger, initLogger } from './utils/logger';
 import { loadMartialArtsDatabase } from './utils/martialArtsDatabase';
 import {
   applyRegexRules,
@@ -33,15 +42,6 @@ import {
   parseOptions,
   readGameData
 } from './utils/variableReader';
-import { initLogger, gameLogger } from './utils/logger';
-import {
-  useDebugLogs,
-  useToast,
-  usePageFlow,
-  useGameState,
-  useEventListeners,
-  useMessageHandler,
-} from './hooks';
 
 const App: React.FC = () => {
   // 使用自定义 hooks
@@ -213,7 +213,7 @@ const App: React.FC = () => {
 地点: ${formData.locationInfo.location}
 出身: ${formData.origin}
 武功: ${formData.martialArtId}
-属性: 臂力${formData.initialAttributes.brawn} 根骨${formData.initialAttributes.root} 机敏${formData.initialAttributes.agility} 悟性${formData.initialAttributes.savvy} 洞察${formData.initialAttributes.insight} 风姿${formData.initialAttributes.charisma} 福缘${formData.initialAttributes.luck}`;
+属性: 臂力${formData.initialAttributes.臂力} 根骨${formData.initialAttributes.根骨} 机敏${formData.initialAttributes.机敏} 悟性${formData.initialAttributes.悟性} 洞察${formData.initialAttributes.洞察} 风姿${formData.initialAttributes.风姿} 福缘${formData.initialAttributes.福缘}`;
 
     addDebugLog('prompt', openingMessageSummary);
 
@@ -256,11 +256,11 @@ const App: React.FC = () => {
               attributes: {
                 hp: 1000,
                 mp: 800,
-                brawn: formData.initialAttributes.brawn * 10,
-                root: formData.initialAttributes.root * 10,
-                agility: formData.initialAttributes.agility * 10,
-                savvy: formData.initialAttributes.savvy * 10,
-                insight: formData.initialAttributes.insight * 10
+                臂力: formData.initialAttributes.臂力 * 10,
+                根骨: formData.initialAttributes.根骨 * 10,
+                机敏: formData.initialAttributes.机敏 * 10,
+                悟性: formData.initialAttributes.悟性 * 10,
+                洞察: formData.initialAttributes.洞察 * 10
               },
               biography: formData.origin
             }

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CharacterBuild, CharacterTrait, InitialAttributes, SetupStep } from '../types';
-import { getTraitType } from '../types';
+import type { CharacterBuild, CharacterTrait, InitialAttributes, OriginCategory, RealmLevel, SetupStep } from '../types';
+import { ATTRIBUTE_DESCRIPTIONS, ATTRIBUTE_NAMES, getTraitType } from '../types';
 import {
   calculateAttributeCost,
   calculateLuckAttributeCost,
@@ -18,8 +18,6 @@ import {
   TALENT_TIERS,
   type EventLocation,
   type NewGameFormData,
-  type OriginCategory,
-  type RealmLevel
 } from '../utils/gameInitializer';
 import {
   getAllMartialArtNames,
@@ -192,7 +190,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
   const attributePointsUsed = useMemo(() => {
     let total = 0;
     for (const key of Object.keys(attributes) as Array<keyof InitialAttributes>) {
-      if (key === 'luck') {
+      if (key === '福缘') {
         // 福缘：使用福缘专用的阶梯点数计算（范围 [-6, 14]，基础值 0）
         total += calculateLuckAttributeCost(attributes[key]);
       } else {
@@ -583,7 +581,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
     setAttributes(prev => {
       // 根据属性类型确定有效范围
       let clampedValue: number;
-      if (key === 'luck') {
+      if (key === '福缘') {
         // 福缘的范围是 [-6, 14]
         clampedValue = Math.max(MIN_LUCK_VALUE, Math.min(MAX_LUCK_VALUE, newValue));
       } else {
@@ -595,7 +593,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
       const newAttrs = { ...prev, [key]: clampedValue };
       let newTotalCost = 0;
       for (const k of Object.keys(newAttrs) as Array<keyof InitialAttributes>) {
-        if (k === 'luck') {
+        if (k === '福缘') {
           // 福缘：使用福缘专用的阶梯点数计算
           newTotalCost += calculateLuckAttributeCost(newAttrs[k]);
         } else {
@@ -1051,7 +1049,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                 {errors.attributes && <p className="error-text center">{errors.attributes}</p>}
 
                 <div className="attributes-grid new-style">
-                  {(Object.keys(attributes) as Array<keyof InitialAttributes>).filter(key => key !== 'luck').map((key) => {
+                  {(Object.keys(attributes) as Array<keyof InitialAttributes>).filter(key => key !== '福缘').map((key) => {
                     // 获取当前属性触发的天赋
                     const triggeredForAttr = attributeTriggeredTraits.filter(t =>
                       t.attributeThreshold?.attribute === key
@@ -1062,12 +1060,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                       <div key={key} className="attribute-card enhanced">
                         <div className="attr-header">
                           <span className="attr-name">
-                            {key === 'brawn' && '臂力'}
-                            {key === 'root' && '根骨'}
-                            {key === 'agility' && '机敏'}
-                            {key === 'savvy' && '悟性'}
-                            {key === 'insight' && '洞察'}
-                            {key === 'charisma' && '风姿'}
+                            {ATTRIBUTE_NAMES[key]}
                           </span>
                           <span className="attr-value">{attributes[key]}</span>
                           <span className={`attr-cost ${attrCost > 0 ? 'positive' : attrCost < 0 ? 'negative' : ''}`}>
@@ -1075,12 +1068,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                           </span>
                         </div>
                         <p className="attr-desc">
-                          {key === 'brawn' && '力量与体魄，影响近战伤害和负重'}
-                          {key === 'root' && '根基与体质，影响气血上限和恢复'}
-                          {key === 'agility' && '身法与反应，影响闪避和出手速度'}
-                          {key === 'savvy' && '悟性与理解，影响武学修炼速度'}
-                          {key === 'insight' && '洞察与感知，影响功法精进消耗'}
-                          {key === 'charisma' && '风姿与气度，影响人际交往'}
+                          {ATTRIBUTE_DESCRIPTIONS[key]}
                         </p>
                         <div className="attr-controls">
                           <button
@@ -1133,15 +1121,15 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                   {(() => {
                     // 获取福缘触发的天赋
                     const triggeredForLuck = attributeTriggeredTraits.filter(t =>
-                      t.attributeThreshold?.attribute === 'luck'
+                      t.attributeThreshold?.attribute === '福缘'
                     );
-                    const luckCost = calculateLuckAttributeCost(attributes.luck);
+                    const luckCost = calculateLuckAttributeCost(attributes.福缘);
                     
                     return (
                       <div className="attribute-card enhanced luck-card">
                         <div className="attr-header">
                           <span className="attr-name">🍀 福缘</span>
-                          <span className="attr-value">{attributes.luck}</span>
+                          <span className="attr-value">{attributes.福缘}</span>
                           <span className={`attr-cost ${luckCost > 0 ? 'positive' : luckCost < 0 ? 'negative' : ''}`}>
                             {luckCost > 0 ? `+${luckCost}` : luckCost < 0 ? luckCost : '±0'}
                           </span>
@@ -1153,8 +1141,8 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                           <button
                             type="button"
                             className="attr-btn minus"
-                            onClick={() => setAttributeValue('luck', attributes.luck - 1)}
-                            disabled={attributes.luck <= MIN_LUCK_VALUE}
+                            onClick={() => setAttributeValue('福缘', attributes.福缘 - 1)}
+                            disabled={attributes.福缘 <= MIN_LUCK_VALUE}
                           >
                             −
                           </button>
@@ -1163,15 +1151,15 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                             className="attr-slider"
                             min={MIN_LUCK_VALUE}
                             max={MAX_LUCK_VALUE}
-                            value={attributes.luck}
-                            onChange={(e) => setAttributeValue('luck', Number(e.target.value))}
+                            value={attributes.福缘}
+                            onChange={(e) => setAttributeValue('福缘', Number(e.target.value))}
                             disabled={isLoading}
                           />
                           <button
                             type="button"
                             className="attr-btn plus"
-                            onClick={() => setAttributeValue('luck', attributes.luck + 1)}
-                            disabled={attributes.luck >= MAX_LUCK_VALUE}
+                            onClick={() => setAttributeValue('福缘', attributes.福缘 + 1)}
+                            disabled={attributes.福缘 >= MAX_LUCK_VALUE}
                           >
                             +
                           </button>
@@ -2278,7 +2266,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                   <div className="form-group">
                     <label className="form-label">
                       外貌描述
-                      <span className="label-hint">（包含身材特征，基于风姿{attributes.charisma}、臂力{attributes.brawn}和根骨{attributes.root}）</span>
+                      <span className="label-hint">（包含身材特征，基于风姿{attributes.风姿}、臂力{attributes.臂力}和根骨{attributes.根骨}）</span>
                     </label>
                     <div className="input-with-btn">
                       <div className="input-wrapper">
@@ -2372,13 +2360,9 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                   <div className="preview-section">
                     <h4 className="preview-title">七维属性</h4>
                     <div className="preview-attributes">
-                      <span>臂力 {attributes.brawn}</span>
-                      <span>根骨 {attributes.root}</span>
-                      <span>机敏 {attributes.agility}</span>
-                      <span>悟性 {attributes.savvy}</span>
-                      <span>洞察 {attributes.insight}</span>
-                      <span>风姿 {attributes.charisma}</span>
-                      <span>福缘 {attributes.luck}</span>
+                      {(Object.keys(ATTRIBUTE_NAMES) as Array<keyof InitialAttributes>).map(key => (
+                        <span key={key}>{ATTRIBUTE_NAMES[key]} {attributes[key]}</span>
+                      ))}
                     </div>
                   </div>
 

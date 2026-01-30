@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { CharacterProfile, WorldTime } from '../../types';
+import { gameLogger } from '../../utils/logger';
 import {
   checkBreakthrough,
   getBreakthroughTooltip,
@@ -7,7 +8,6 @@ import {
   parseRealm,
   performBreakthrough
 } from '../../utils/realmSystem';
-import { gameLogger } from '../../utils/logger';
 
 /* --- Helper Components (Internal to CharacterPanel) --- */
 const StatBar = ({ label, current, max, color }: { label: string, current: number, max: number, color: string }) => (
@@ -265,13 +265,13 @@ export const CharacterPanel: React.FC<CharacterPanelProps> = ({ stats, worldTime
                 <span className="diamond-bullet" style={{ width: '6px', height: '6px', background: '#d97706', transform: 'rotate(45deg)' }}></span> 根骨天资
             </h4>
             <div className="attr-grid">
-                <Attribute label="臂力" value={stats.attributes.brawn} initial={stats.initialAttributes.brawn} />
-                <Attribute label="根骨" value={stats.attributes.root} initial={stats.initialAttributes.root} />
-                <Attribute label="机敏" value={stats.attributes.agility} initial={stats.initialAttributes.agility} />
-                <Attribute label="悟性" value={stats.attributes.savvy} initial={stats.initialAttributes.savvy} />
-                <Attribute label="洞察" value={stats.attributes.insight} initial={stats.initialAttributes.insight} />
-                <Attribute label="风姿" value={stats.initialAttributes.charisma} />
-                <Attribute label="福缘" value={stats.initialAttributes.luck} />
+                <Attribute label="臂力" value={stats.attributes.臂力} initial={stats.initialAttributes.臂力} />
+                <Attribute label="根骨" value={stats.attributes.根骨} initial={stats.initialAttributes.根骨} />
+                <Attribute label="机敏" value={stats.attributes.机敏} initial={stats.initialAttributes.机敏} />
+                <Attribute label="悟性" value={stats.attributes.悟性} initial={stats.initialAttributes.悟性} />
+                <Attribute label="洞察" value={stats.attributes.洞察} initial={stats.initialAttributes.洞察} />
+                <Attribute label="风姿" value={stats.initialAttributes.风姿} />
+                <Attribute label="福缘" value={stats.initialAttributes.福缘} />
             </div>
         </div>
 
