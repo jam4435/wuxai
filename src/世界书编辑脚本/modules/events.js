@@ -1,0 +1,760 @@
+/**
+ * 事件处理中心
+ * 负责绑定事件监听器并分发到对应的命令处理器
+ */
+
+import { updateWorldbookWith } from './api.js';
+import { dispatchCommand, hasCommand } from './commands/index.js';
+// 导入命令模块以触发注册
+import './commands/selectorCommands.js';
+import './commands/worldbookCommands.js';
+import './commands/titleBarCommands.js';
+import './commands/entryCommands.js';
+
+import {
+  ACTIVE_TAB_CLASS,
+  DEBUG_MODE,
+  GLOBAL_LOREBOOK_LIST_CONTAINER_ID,
+  GLOBAL_WORLDBOOK_SEARCH_ID,
+  GLOBAL_WORLDBOOK_TAGS_CONTAINER_ID,
+  LOREBOOK_BUTTON_ID,
+  LOREBOOK_EDITOR_PANEL_ID,
+  LOREBOOK_ENTRY_CLASS,
+  LOREBOOK_LIST_CONTAINER_ID,
+  LOREBOOK_PANEL_ID,
+  MOBILE_TOOLTIP_ID,
+} from './config.js';
+import {
+  executeGlobalSearchAndReplace,
+  previewGlobalSearchAndReplace,
+  runClicheCleanup,
+  runDepthOptimization,
+  runFormatCleanup,
+  runKeywordFix,
+} from './features/optimizer.js';
+import { saveSortPreference } from './features/sorting.js';
+import {
+  allEntriesData,
+  clearFilteredEntries,
+  clearSelectedEntries,
+  lorebookSorts,
+  setFilteredEntries,
+  virtualScrollers,
+} from './state.js';
+import { toggleAllEntries } from './features/batchActions.js';
+import { createEntryHtml } from './ui/entry.js';
+import {
+  loadLorebookEntries,
+  updateHeaderCheckboxState,
+} from './ui/list.js';
+import { switchTab, toggleLorebookPanel } from './ui/panel.js';
+import { ensureNumericUID, isMobile } from './utils.js';
+
+/**
+ * 刷新条目列表
+ */
+async function refreshList(lorebookName, isGlobal) {
+  clearSelectedEntries(lorebookName);
+
+  const parentDoc = window.parent.document;
+  const $entriesWrapper = $(`.lorebook-entries-wrapper[data-lorebook-name="${lorebookName}"]`, parentDoc);
+  if ($entriesWrapper.is(':visible')) {
+    await loadLorebookEntries(lorebookName, $entriesWrapper, isGlobal);
+  }
+}
+
+/**
+ * 绑定所有事件监听器
+ */
+export function bindEventListeners() {
+  const parentDoc = window.parent.document;
+  const $panel = $(`#${LOREBOOK_PANEL_ID}`, parentDoc);
+  const $editorPanel = $(`#${LOREBOOK_EDITOR_PANEL_ID}`, parentDoc);
+
+  // --- Layout Debugger ---
+  $(parentDoc).on('click', '#layout-debugger-button', () => {
+    console.clear();
+    console.log('%c--- Layout Debugger Initialized ---', 'color: #ff4d4d; font-weight: bold; font-size: 1.2em;');
+
+    const $modal = $('#lorebook-import-modal', parentDoc);
+    const $mainPanel = $(`#${LOREBOOK_PANEL_ID}`, parentDoc);
+
+    if (!$modal.length) {
+      console.error('DEBUGGER: Import modal (#lorebook-import-modal) not found in DOM.');
+      return;
+    }
+    if (!$mainPanel.length) {
+      console.error('DEBUGGER: Main panel (#enhanced-lorebook-panel) not found in DOM.');
+      return;
+    }
+
+    console.log('%c1. Modal Parent Hierarchy Trace:', 'color: #4d94ff; font-weight: bold;');
+    let current = $modal.get(0);
+    const path = [];
+    while (current && current.tagName !== 'BODY') {
+      const { tagName, id, className } = current;
+      const style = window.getComputedStyle(current);
+      const position = style.getPropertyValue('position');
+      const transform = style.getPropertyValue('transform');
+      const filter = style.getPropertyValue('filter');
+      const perspective = style.getPropertyValue('perspective');
+
+      path.push({
+        element: tagName.toLowerCase() + (id ? `#${id}` : '') + (className ? `.${className.split(' ').join('.')}` : ''),
+        position,
+        transform: transform !== 'none' ? transform : 'default',
+        filter: filter !== 'none' ? filter : 'default',
+        perspective: perspective !== 'none' ? perspective : 'default',
+      });
+      current = current.parentElement;
+    }
+    console.table(path);
+    if (path.some(p => p.transform !== 'default' || p.filter !== 'default' || p.perspective !== 'default')) {
+      console.warn(
+        'DEBUGGER: Found a parent with transform, filter, or perspective. This is likely trapping the `position: fixed` modal and causing the layout issue.',
+      );
+    } else {
+      console.log(
+        'DEBUGGER: No parent element seems to be creating a new stacking context. The issue might be elsewhere.',
+      );
+    }
+
+    console.log('%c2. Computed Styles Comparison:', 'color: #4d94ff; font-weight: bold;');
+    const getStyles = (elem, name) => {
+      const style = window.getComputedStyle(elem);
+      return {
+        element: name,
+        display: style.getPropertyValue('display'),
+        position: style.getPropertyValue('position'),
+        top: style.getPropertyValue('top'),
+        left: style.getPropertyValue('left'),
+        width: style.getPropertyValue('width'),
+        height: style.getPropertyValue('height'),
+        zIndex: style.getPropertyValue('z-index'),
+        overflow: style.getPropertyValue('overflow'),
+      };
+    };
+    console.table([
+      getStyles($modal.get(0), '#lorebook-import-modal'),
+      getStyles($mainPanel.get(0), '#enhanced-lorebook-panel'),
+    ]);
+
+    console.log('%c--- Debug Report Complete ---', 'color: #ff4d4d; font-weight: bold; font-size: 1.2em;');
+    alert('调试报告已输出到浏览器开发者控制台 (按 F12 打开)。请将Console标签页下的内容截图或复制给开发者。');
+  });
+
+  // Mobile long-press tooltip logic
+  if (isMobile()) {
+    let pressTimer;
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+
+    $panel.on('touchstart', '[title]', function (e) {
+      const $target = $(this);
+      const title = $target.attr('title');
+      if (!title) return;
+
+      lastTouchX = e.originalEvent.touches.clientX;
+      lastTouchY = e.originalEvent.touches.clientY;
+
+      pressTimer = setTimeout(() => {
+        const $tooltip = $(`#${MOBILE_TOOLTIP_ID}`, parentDoc);
+        $tooltip.text(title).css({ top: '-9999px', left: '-9999px' }).show();
+
+        const targetRect = $target.get(0).getBoundingClientRect();
+        const tooltipNode = $tooltip.get(0);
+        const tooltipWidth = tooltipNode.offsetWidth;
+        const tooltipHeight = tooltipNode.offsetHeight;
+        const windowWidth = window.parent.innerWidth;
+
+        let top = targetRect.top - tooltipHeight - 10;
+        let left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+
+        if (top < 5) {
+          top = targetRect.bottom + 10;
+        }
+        if (left < 5) {
+          left = 5;
+        }
+        if (left + tooltipWidth > windowWidth - 5) {
+          left = windowWidth - tooltipWidth - 5;
+        }
+
+        $tooltip.css({
+          top: `${top}px`,
+          left: `${left}px`,
+          transform: 'none',
+        });
+      }, 500);
+    });
+
+    $panel.on('touchend touchcancel', '[title]', function () {
+      clearTimeout(pressTimer);
+      $(`#${MOBILE_TOOLTIP_ID}`, parentDoc).hide();
+    });
+
+    $panel.on('touchmove', '[title]', function (e) {
+      const touch = e.originalEvent.touches;
+      if (Math.abs(touch.clientX - lastTouchX) > 10 || Math.abs(touch.clientY - lastTouchY) > 10) {
+        clearTimeout(pressTimer);
+        $(`#${MOBILE_TOOLTIP_ID}`, parentDoc).hide();
+      }
+    });
+  }
+
+  // Double-click header to show debug info
+  const toggleDebug = $elem => {
+    $elem.find('.debug-info').toggle();
+  };
+  $panel.find('.panel-header h4').on('dblclick', () => toggleDebug($panel));
+  $editorPanel.find('.modal-header h4').on('dblclick', function () {
+    toggleDebug($(this).closest('.lorebook-modal-content'));
+  });
+
+  // Main panel button and close button
+  $(parentDoc)
+    .off(`click.${LOREBOOK_BUTTON_ID}`)
+    .on(`click.${LOREBOOK_BUTTON_ID}`, `#${LOREBOOK_BUTTON_ID}`, event => {
+      event.preventDefault();
+      toggleLorebookPanel();
+    });
+  $panel.off('click.lorebookClose').on('click.lorebookClose', '.close-button', toggleLorebookPanel);
+
+  // Tab switching
+  $panel.off('click.lorebookTabs').on('click.lorebookTabs', '.tab-button', function () {
+    const tabId = $(this).attr('id');
+    if (tabId && !$(this).hasClass(ACTIVE_TAB_CLASS)) {
+      switchTab(tabId);
+    }
+  });
+
+  // 【调试】事件计数器，用于追踪展开事件
+  let expandEventCounter = 0;
+
+  // Event delegation for all entry and title bar interactions
+  $panel.off('click.lorebookAction change.lorebookAction input.lorebookAction').on('click.lorebookAction change.lorebookAction input.lorebookAction', `[data-action]`, async function (e) {
+    e.stopPropagation();
+    const $target = $(e.target);
+    const $actionTarget = $target.closest('[data-action]');
+    if (!$actionTarget.length) return;
+
+    const action = $actionTarget.data('action');
+
+    // 调试：记录 expand action 的事件触发
+    if (DEBUG_MODE && action === 'expand') {
+      expandEventCounter++;
+      const $entryItem = $target.closest(`.${LOREBOOK_ENTRY_CLASS}`);
+      const entryUid = ensureNumericUID($entryItem.data('entry-uid'));
+      const entryLorebookName = $entryItem.data('entry-lorebook');
+      console.log(`[Events] expand action #${expandEventCounter}`, { entryUid, lorebookName: entryLorebookName });
+    }
+
+    const $title = $target.closest('.lorebook-title');
+    const $item = $target.closest(`.${LOREBOOK_ENTRY_CLASS}`);
+
+    const isTitleAction = $title.length > 0 && !$item.length;
+    const isSelectorAction = $target.closest('#global-lorebook-selector').length > 0;
+
+    // 构建命令上下文
+    const context = {
+      event: e,
+      $target,
+      $actionTarget,
+      $panel,
+      parentDoc,
+      refreshList,
+    };
+
+    // 处理选择器操作
+    if (isSelectorAction) {
+      if (hasCommand(action)) {
+        await dispatchCommand(action, context);
+      }
+      return;
+    }
+
+    // 处理世界书管理操作（不需要 lorebookName 的操作）
+    const worldbookActions = [
+      'import-worldbook', 'export-worldbook', 'create-worldbook',
+      'delete-worldbook', 'rename-worldbook', 'replace-character-lorebook',
+      'set-as-char-lorebook', 'set-as-chat-lorebook'
+    ];
+    if (worldbookActions.includes(action)) {
+      if (hasCommand(action)) {
+        await dispatchCommand(action, context);
+      }
+      return;
+    }
+
+    // 处理标题栏操作
+    if (isTitleAction) {
+      const lorebookName = $title.data('lorebook-name');
+      const isGlobal = $title.data('is-global');
+
+      context.lorebookName = lorebookName;
+      context.isGlobal = isGlobal;
+      context.$title = $title;
+
+      if (hasCommand(action)) {
+        await dispatchCommand(action, context);
+      }
+      return;
+    }
+
+    // 处理条目操作
+    if (!$item.length || !action) return;
+
+    const lorebookName = $item.data('entry-lorebook');
+    const numericUid = ensureNumericUID($item.data('entry-uid'));
+    const isGlobal = $item.closest('.lorebook-entries-container').attr('data-is-global') === 'true';
+
+    context.lorebookName = lorebookName;
+    context.numericUid = numericUid;
+    context.isGlobal = isGlobal;
+    context.$item = $item;
+
+    if (hasCommand(action)) {
+      await dispatchCommand(action, context);
+    }
+  });
+
+  // Header checkbox
+  $panel.off('change.headerCheckbox').on('change', '.header-checkbox', function (e) {
+    e.stopPropagation();
+    const $headerCheckbox = $(this);
+    const lorebookName = $headerCheckbox.data('lorebook-name');
+    // 【修复】确保 isGlobal 是布尔值，处理字符串 "true"/"false" 的情况
+    const isGlobalAttr = $headerCheckbox.data('is-global');
+    const isGlobal = isGlobalAttr === true || isGlobalAttr === 'true';
+    const isChecked = $headerCheckbox.prop('checked');
+    toggleAllEntries(lorebookName, isGlobal, isChecked);
+    $headerCheckbox.prop('indeterminate', false);
+  });
+
+  // Global lorebook title click to expand/collapse
+  $panel.off('click.lorebookTitleClick').on('click.lorebookTitleClick', '.lorebook-title-clickable', function (e) {
+    e.stopPropagation();
+    const $title = $(this);
+    if (
+      $(e.target).closest(
+        '.lorebook-search-container, .lorebook-batch-action-button, .lorebook-delete-entries-button, .lorebook-add-entry-button, .sort-display-button, .lorebook-batch-toggle-container',
+      ).length > 0
+    ) {
+      return;
+    }
+    const lorebookName = $title.attr('data-lorebook-name');
+    const isLoaded = $title.attr('data-loaded') === 'true';
+    const isExpanded = $title.attr('data-expanded') === 'true';
+    const $entriesWrapper = $(`.lorebook-entries-wrapper[data-lorebook-name="${lorebookName}"]`);
+
+    const toggleUI = state => {
+      $title.attr('data-expanded', state);
+      $title.find('.lorebook-expand-icon').toggleClass('fa-chevron-up', state).toggleClass('fa-chevron-down', !state);
+      $entriesWrapper[state ? 'slideDown' : 'slideUp'](200);
+    };
+
+    if (isExpanded) {
+      toggleUI(false);
+    } else if (!isLoaded) {
+      loadLorebookEntries(lorebookName, $entriesWrapper, true).then(success => {
+        if (success) {
+          $title.attr('data-loaded', 'true');
+          toggleUI(true);
+        } else {
+          $entriesWrapper.html('<div class="no-entries-message">加载失败，请查看控制台</div>').show();
+        }
+      });
+    } else {
+      toggleUI(true);
+    }
+  });
+
+  // Sort dropdown
+  $panel.on('click', '.sort-display-button', function (e) {
+    e.stopPropagation();
+    $('.sort-dropdown', parentDoc).not($(this).siblings('.sort-dropdown')).hide();
+    $(this).siblings('.sort-dropdown').toggle();
+  });
+  $panel.on('click', '.sort-dropdown li', function (e) {
+    e.stopPropagation();
+    const $li = $(this);
+    const $container = $li.closest('.lorebook-title');
+    const lorebookName = $container.find('.lorebook-search-input').data('lorebook-name');
+    const isGlobal = $container.find('.lorebook-search-input').data('is-global');
+    const sortBy = $li.data('sort-by');
+    const sortDir = $li.data('sort-dir');
+
+    lorebookSorts[lorebookName] = { by: sortBy, dir: sortDir };
+    saveSortPreference();
+
+    const $sortButton = $container.find('.sort-display-button');
+    $sortButton.html(`${$li.text()} <i class="fa-solid fa-caret-down"></i>`);
+    $li.siblings().removeClass('active');
+    $li.addClass('active').closest('.sort-dropdown').hide();
+
+    const $entriesWrapper = $(`.lorebook-entries-wrapper[data-lorebook-name="${lorebookName}"]`, parentDoc);
+    if ($entriesWrapper.is(':visible')) {
+      loadLorebookEntries(lorebookName, $entriesWrapper, isGlobal);
+    }
+  });
+  $(parentDoc).on('click', () => {
+    $panel.find('.sort-dropdown').hide();
+    $panel.find('.lorebook-batch-toggle-container').removeClass('active');
+  });
+
+  // 点击外部关闭预设下拉菜单
+  $(parentDoc).on('click', function (e) {
+    if (!$(e.target).closest('.preset-dropdown-container').length) {
+      $panel.find('.preset-dropdown-menu').hide();
+    }
+  });
+
+  // Preset dropdown toggle
+  $panel.on('click', '.preset-dropdown-button', function (e) {
+    e.stopPropagation();
+    const $menu = $(this).siblings('.preset-dropdown-menu');
+    $('.preset-dropdown-menu', parentDoc).not($menu).hide();
+    $menu.toggle();
+  });
+
+  // Batch toggle dropdown
+  $panel.on('click', '.batch-toggle-button', function (e) {
+    e.stopPropagation();
+    const $container = $(this).closest('.lorebook-batch-toggle-container');
+    const wasActive = $container.hasClass('active');
+    $('.lorebook-batch-toggle-container', parentDoc).removeClass('active');
+    if (!wasActive) {
+      $container.addClass('active');
+    }
+  });
+  $panel.on('click', '.batch-toggle-dropdown', function (e) {
+    e.stopPropagation();
+  });
+
+  // Editor panel events
+  $editorPanel.off('click.lorebookEditorClose').on('click', '.close-button, .cancel-button', function () {
+    $editorPanel.find('#entry-edit-form').trigger('reset');
+    $editorPanel.find('.save-button').text('保存').prop('disabled', false);
+    $editorPanel.find('.debug-info').hide();
+    $editorPanel.hide();
+  });
+  $editorPanel.off('submit.lorebookEditorForm').on('submit', '#entry-edit-form', async function (e) {
+    e.preventDefault();
+    const formData = Object.fromEntries(new FormData(this));
+    formData.uid = ensureNumericUID(formData.uid);
+
+    const $saveBtn = $(this).find('.save-button');
+    $saveBtn.text('保存中...').prop('disabled', true);
+
+    const { saveEditedEntry } = await import('./ui/editor.js');
+    saveEditedEntry(formData)
+      .then(result => {
+        if (result.success) {
+          $editorPanel.hide();
+          const listContainerId = result.isGlobal
+            ? `#${GLOBAL_LOREBOOK_LIST_CONTAINER_ID}`
+            : `#${LOREBOOK_LIST_CONTAINER_ID}`;
+          const $list = $panel.find(listContainerId);
+          if (result.isGlobal) {
+            const $wrapper = $(`.lorebook-entries-wrapper[data-lorebook-name="${formData.lorebook}"]`);
+            loadLorebookEntries(formData.lorebook, $wrapper, true);
+          } else {
+            import('./ui/list.js').then(({ updateBoundLorebooksList }) => {
+              updateBoundLorebooksList($list, true);
+            });
+          }
+        } else {
+          alert(`保存失败: ${result.message}`);
+        }
+      })
+      .finally(() => {
+        $saveBtn.text('保存').prop('disabled', false);
+      });
+  });
+  $editorPanel.off('change.positionChange').on('change', '#entry-position', function () {
+    toggleDepthFieldVisibility($(this).val());
+  });
+  $editorPanel.off('change.constantToggle').on('change', '#entry-constant', function () {
+    const isChecked = $(this).prop('checked');
+    const $slider = $(this).next('.constant-toggle-slider');
+    $slider.css('background-color', isChecked ? '#2196F3' : '#4CAF50');
+    const $container = $(this).closest('.constant-toggle-container');
+    $container
+      .find('.label-left')
+      .css({ color: isChecked ? '#aaa' : '#fff', 'font-weight': isChecked ? 'normal' : 'bold' });
+    $container
+      .find('.label-right')
+      .css({ color: isChecked ? '#fff' : '#aaa', 'font-weight': isChecked ? 'bold' : 'normal' });
+  });
+  $editorPanel.off('click.labelToggle').on('click', '.label-left, .label-right', function () {
+    const $checkbox = $(this).closest('.constant-toggle-container').find('#entry-constant');
+    $checkbox.prop('checked', $(this).hasClass('label-right')).trigger('change');
+  });
+
+  // Optimizer modal events
+  $(parentDoc).on('click', '#lorebook-optimize-modal .close-button', () => {
+    $('#lorebook-optimize-modal', parentDoc).hide();
+  });
+  $(parentDoc).on('click', '#lorebook-reorder-modal .close-button', () => {
+    $('#lorebook-reorder-modal', parentDoc).hide();
+  });
+  $(parentDoc).on('click', '#search-preview-modal .close-button', () => {
+    $('#search-preview-modal', parentDoc).hide();
+  });
+
+  $(parentDoc).on('click', '#lorebook-optimize-modal [data-action]', async e => {
+    const $target = $(e.currentTarget);
+    const action = $target.data('action');
+    const $optimizeModal = $('#lorebook-optimize-modal', parentDoc);
+    const lorebookName = $optimizeModal.data('lorebook-name');
+    const isGlobal = $optimizeModal.data('is-global');
+    let needsRefresh = false;
+
+    switch (action) {
+      case 'run-format-cleanup':
+        needsRefresh = await runFormatCleanup(lorebookName, isGlobal);
+        break;
+      case 'run-keyword-fix':
+        needsRefresh = await runKeywordFix(lorebookName, isGlobal);
+        break;
+      case 'run-reorder-entries-interactive':
+        {
+          const $container = $(`.lorebook-entries-container[data-lorebook-name="${lorebookName}"]`, parentDoc);
+          const $selectedItems = $container
+            .find(`.lorebook-entry-checkbox:checked`)
+            .closest(`.${LOREBOOK_ENTRY_CLASS}`);
+          if ($selectedItems.length < 2) {
+            alert('请至少选择两个条目进行排序。');
+            break;
+          }
+          const $reorderModal = $('#lorebook-reorder-modal', parentDoc);
+          $reorderModal.css('display', 'flex');
+
+          $reorderModal
+            .find('#confirm-reorder-button')
+            .off('click')
+            .on('click', async () => {
+              const start = parseInt($('#reorder-start-number', $reorderModal).val(), 10);
+              const step = parseInt($('#reorder-step-number', $reorderModal).val(), 10);
+              const uidsInOrder = $selectedItems.map((i, el) => ensureNumericUID($(el).data('entry-uid'))).get();
+              let modifiedCount = 0;
+              await updateWorldbookWith(lorebookName, entries => {
+                let hasChanges = false;
+                const updatedEntries = [...entries];
+                let currentOrder = start;
+                uidsInOrder.forEach(uid => {
+                  const entryIndex = updatedEntries.findIndex(entry => ensureNumericUID(entry.uid) === uid);
+                  if (entryIndex !== -1) {
+                    const originalEntry = updatedEntries[entryIndex];
+                    if (_.get(originalEntry, 'position.order') !== currentOrder) {
+                      const entryToUpdate = _.cloneDeep(originalEntry);
+                      _.set(entryToUpdate, 'position.order', currentOrder);
+                      updatedEntries[entryIndex] = entryToUpdate;
+                      hasChanges = true;
+                      modifiedCount++;
+                    }
+                    currentOrder += step;
+                  }
+                });
+                return hasChanges ? updatedEntries : entries;
+              });
+              if (modifiedCount > 0) {
+                alert(`成功为 ${modifiedCount} 个条目重新排序！`);
+                refreshList(lorebookName, isGlobal);
+              } else {
+                alert('没有需要更新顺序的条目。');
+              }
+              $reorderModal.hide();
+            });
+        }
+        break;
+      case 'run-depth-optimization':
+        needsRefresh = await runDepthOptimization(lorebookName, isGlobal);
+        break;
+      case 'run-cliche-cleanup':
+        needsRefresh = await runClicheCleanup(lorebookName, isGlobal);
+        break;
+      case 'preview-global-search-replace':
+        await previewGlobalSearchAndReplace(lorebookName, isGlobal);
+        break;
+      case 'execute-global-search-replace':
+        needsRefresh = await executeGlobalSearchAndReplace(lorebookName, isGlobal);
+        break;
+    }
+
+    if (needsRefresh) {
+      await refreshList(lorebookName, isGlobal);
+    }
+  });
+}
+
+export function bindSearchEvents() {
+  const parentDoc = window.parent.document;
+  const $panel = $(`#${LOREBOOK_PANEL_ID}`, parentDoc);
+  if (!$panel.length) return;
+
+  // 筛选常驻世界书
+  $panel.on('input', `#${GLOBAL_WORLDBOOK_SEARCH_ID}`, function () {
+    const searchTerm = $(this).val().toLowerCase();
+    const $tags = $(`#${GLOBAL_WORLDBOOK_TAGS_CONTAINER_ID} .lorebook-tag`, parentDoc);
+    $tags.each(function () {
+      const $tag = $(this);
+      const lorebookName = $tag.data('lorebook-name').toLowerCase();
+      $tag.toggle(lorebookName.includes(searchTerm));
+    });
+  });
+
+  // 搜索并添加常驻世界书
+  const debounceSearch = _.debounce(async (searchTerm, $input) => {
+    const isCharacterSearch = $input.attr('id') === 'character-worldbook-search-input';
+    const $resultsContainer = isCharacterSearch
+      ? $('#character-worldbook-search-results', parentDoc)
+      : $('.add-worldbook-results', parentDoc);
+
+    if (searchTerm === null) {
+      $resultsContainer.empty().hide();
+      return;
+    }
+
+    const { getWorldbookNamesSafe } = await import('./api.js');
+    const { getPinnedBooks } = await import('./ui/list.js');
+
+    const allBooks = await getWorldbookNamesSafe();
+    let filteredBooks;
+
+    if (isCharacterSearch) {
+      filteredBooks = searchTerm ? allBooks.filter(b => b.toLowerCase().includes(searchTerm)) : allBooks;
+    } else {
+      const pinnedBooks = getPinnedBooks();
+      filteredBooks = allBooks.filter(
+        b => !pinnedBooks.includes(b) && (searchTerm === '' || b.toLowerCase().includes(searchTerm)),
+      );
+    }
+
+    if (filteredBooks.length === 0) {
+      $resultsContainer.html('<div class="add-worldbook-no-results">没有找到匹配的世界书</div>').show();
+      return;
+    }
+
+    const action = isCharacterSearch ? 'replace-character-lorebook' : 'pin-global-lorebook';
+    const resultsHtml = filteredBooks
+      .map(
+        name => `
+          <div class="add-worldbook-result-item" data-action="${action}" data-lorebook-name="${name}">
+              ${name}
+          </div>
+      `,
+      )
+      .join('');
+    $resultsContainer.html(resultsHtml).show();
+  }, 300);
+
+  $panel.on('focus', '#add-worldbook-search-input, #character-worldbook-search-input', function () {
+    const $input = $(this);
+    const searchTerm = $input.val().toLowerCase();
+    debounceSearch(searchTerm, $input);
+  });
+
+  $panel.on('input', '#add-worldbook-search-input, #character-worldbook-search-input', function () {
+    const $input = $(this);
+    const searchTerm = $input.val().toLowerCase();
+    debounceSearch(searchTerm, $input);
+  });
+
+  $panel.on('blur', '#add-worldbook-search-input, #character-worldbook-search-input', function () {
+    const $input = $(this);
+    setTimeout(() => {
+      debounceSearch(null, $input);
+    }, 200);
+  });
+
+  // 点击外部隐藏结果
+  $(parentDoc).on('click', function (e) {
+    if (!$(e.target).closest('.global-lorebook-adder').length) {
+      $('.add-worldbook-results', parentDoc).hide();
+    }
+  });
+
+  const debouncedFilter = _.debounce((lorebookName, searchText, isGlobal) => {
+    const clusterize = virtualScrollers[lorebookName];
+    if (!clusterize) return;
+
+    const allEntries = allEntriesData[lorebookName] || [];
+    const lowerSearchText = searchText.toLowerCase().trim();
+
+    const matchedEntries = !lowerSearchText
+      ? allEntries
+      : allEntries.filter(
+          entry =>
+            (entry.name || '').toLowerCase().includes(lowerSearchText) ||
+            (entry.content || '').toLowerCase().includes(lowerSearchText) ||
+            (Array.isArray(entry.strategy?.keys) &&
+              entry.strategy.keys.join(',').toLowerCase().includes(lowerSearchText)),
+        );
+
+    if (!lowerSearchText) {
+      clearFilteredEntries(lorebookName);
+    } else {
+      setFilteredEntries(lorebookName, matchedEntries);
+    }
+
+    const newRows = matchedEntries.map(entry => `<li>${createEntryHtml(entry, lorebookName)}</li>`);
+
+    clusterize.update(newRows);
+
+    setTimeout(() => updateHeaderCheckboxState(lorebookName, isGlobal), 50);
+  }, 300);
+
+  $panel
+    .off('input.search keydown.search')
+    .on('input.search', '.lorebook-search-input', function () {
+      const $input = $(this);
+      const searchText = $input.val();
+      const lorebookName = $input.attr('data-lorebook-name');
+      const isGlobal = $input.data('is-global');
+      debouncedFilter(lorebookName, searchText, isGlobal);
+    })
+    .on('keydown.search', '.lorebook-search-input', function (e) {
+      if (e.key === 'Escape') {
+        $(this).val('').trigger('input.search');
+      }
+    });
+
+  // 移动端关键字输入优化
+  if (isMobile()) {
+    $panel.on('focus', '.keywords-input, .secondary-keywords-input', function () {
+      const $input = $(this);
+      const $keywordsArea = $input.closest('.keywords-edit-area');
+      const $keywordGroup = $input.closest('.keyword-group');
+
+      $keywordsArea.addClass('keyword-focused');
+      $keywordGroup.addClass('focused');
+    });
+
+    $panel.on('blur', '.keywords-input, .secondary-keywords-input', function () {
+      const $input = $(this);
+      const $keywordsArea = $input.closest('.keywords-edit-area');
+
+      setTimeout(() => {
+        const hasOtherFocused = $keywordsArea.find('.keywords-input:focus, .secondary-keywords-input:focus').length > 0;
+        if (!hasOtherFocused) {
+          $keywordsArea.removeClass('keyword-focused');
+          $keywordsArea.find('.keyword-group').removeClass('focused');
+        }
+      }, 100);
+    });
+  }
+}
+
+/**
+ * 切换深度字段可见性
+ */
+function toggleDepthFieldVisibility(position) {
+  const parentDoc = window.parent.document;
+  const $depthGroup = $('#entry-depth', parentDoc).closest('.form-group');
+  if (position === 'at_depth') {
+    $depthGroup.show();
+  } else {
+    $depthGroup.hide();
+  }
+}

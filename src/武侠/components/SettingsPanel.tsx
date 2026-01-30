@@ -1,0 +1,677 @@
+import React, { useCallback, useRef, useState } from 'react';
+import {
+  DEFAULT_BACKGROUND_SETTINGS,
+  DEFAULT_DISPLAY_SETTINGS,
+  DEFAULT_REGEX_SETTINGS,
+  DisplaySettings,
+  RegexRule,
+  createRegexRule,
+  imageToBase64,
+  importTavernRegexes,
+  validateRegex
+} from '../utils/settingsManager';
+import { Icons } from './Icons';
+import { DebugLogEntry } from '../hooks';
+import { uiLogger } from '../utils/logger';
+
+interface SettingsPanelProps {
+  settings: DisplaySettings;
+  onSettingsChange: (settings: DisplaySettings) => void;
+  debugLogs?: DebugLogEntry[];
+  onClearDebugLogs?: () => void;
+}
+
+/**
+ * 设置面板组件
+ * 提供正文显示、背景和正则替换的设置功能
+ */
+const SettingsPanel: React.FC<SettingsPanelProps> = ({
+  settings,
+  onSettingsChange,
+  debugLogs = [],
+  onClearDebugLogs,
+}) => {
+  const [activeTab, setActiveTab] = useState<'display' | 'background' | 'regex' | 'debug'>('display');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  // 更新单个设置项
+  const updateSetting = useCallback(<K extends keyof DisplaySettings>(
+    key: K,
+    value: DisplaySettings[K]
+  ) => {
+    onSettingsChange({ ...settings, [key]: value });
+  }, [settings, onSettingsChange]);
+
+  // 重置当前页面设置
+  const resetCurrentTab = useCallback(() => {
+    switch (activeTab) {
+      case 'display':
+        onSettingsChange({
+          ...settings,
+          ...DEFAULT_DISPLAY_SETTINGS,
+        });
+        break;
+      case 'background':
+        onSettingsChange({
+          ...settings,
+          ...DEFAULT_BACKGROUND_SETTINGS,
+        });
+        // 清除文件输入
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        break;
+      case 'regex':
+        onSettingsChange({
+          ...settings,
+          ...DEFAULT_REGEX_SETTINGS,
+        });
+        break;
+      case 'debug':
+        // 清空调试日志
+        onClearDebugLogs?.();
+        break;
+    }
+  }, [activeTab, settings, onSettingsChange, onClearDebugLogs]);
+
+  // 获取当前页面的重置按钮文本
+  const getResetButtonText = useCallback(() => {
+    switch (activeTab) {
+      case 'display':
+        return '重置正文显示';
+      case 'background':
+        return '重置背景设置';
+      case 'regex':
+        return '清空所有规则';
+      case 'debug':
+        return '清空调试日志';
+    }
+  }, [activeTab]);
+
+  // 处理图片上传
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 检查文件类型
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件');
+      return;
+    }
+
+    // 检查文件大小 (最大 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('图片大小不能超过 5MB');
+      return;
+    }
+
+    try {
+      const base64 = await imageToBase64(file);
+      updateSetting('backgroundImage', base64);
+    } catch (error) {
+      uiLogger.error('图片上传失败:', error);
+      alert('图片上传失败');
+    }
+  }, [updateSetting]);
+
+  // 清除背景图片
+  const clearBackgroundImage = useCallback(() => {
+    updateSetting('backgroundImage', null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [updateSetting]);
+
+  // 添加正则规则
+  const addRegexRule = useCallback(() => {
+    const newRule = createRegexRule();
+    updateSetting('regexRules', [...settings.regexRules, newRule]);
+  }, [settings.regexRules, updateSetting]);
+
+  // 更新正则规则
+  const updateRegexRule = useCallback((id: string, updates: Partial<RegexRule>) => {
+    const newRules = settings.regexRules.map(rule =>
+      rule.id === id ? { ...rule, ...updates } : rule
+    );
+    updateSetting('regexRules', newRules);
+  }, [settings.regexRules, updateSetting]);
+
+  // 删除正则规则
+  const deleteRegexRule = useCallback((id: string) => {
+    const newRules = settings.regexRules.filter(rule => rule.id !== id);
+    updateSetting('regexRules', newRules);
+  }, [settings.regexRules, updateSetting]);
+
+  // 切换正则规则启用状态
+  const toggleRegexRule = useCallback((id: string) => {
+    const rule = settings.regexRules.find(r => r.id === id);
+    if (rule) {
+      updateRegexRule(id, { enabled: !rule.enabled });
+    }
+  }, [settings.regexRules, updateRegexRule]);
+
+  // 导入酒馆正则
+  const handleImportTavernRegexes = useCallback(() => {
+    const importedRules = importTavernRegexes();
+    if (importedRules.length === 0) {
+      alert('没有找到符合条件的酒馆正则\n\n筛选条件：\n• 已启用\n• 无最小深度\n• 作用于 AI 输出\n• 仅用于格式显示');
+      return;
+    }
+    
+    // 获取现有规则的描述列表（用于重名检查）
+    const existingDescriptions = new Set(
+      settings.regexRules
+        .map(rule => rule.description)
+        .filter((desc): desc is string => !!desc)
+    );
+    
+    // 过滤掉重名的规则
+    const newRules = importedRules.filter(
+      rule => !rule.description || !existingDescriptions.has(rule.description)
+    );
+    const skippedCount = importedRules.length - newRules.length;
+    
+    if (newRules.length === 0) {
+      alert(`所有 ${importedRules.length} 条酒馆正则都已存在（重名），未导入任何规则`);
+      return;
+    }
+    
+    // 将导入的规则添加到现有规则列表末尾
+    updateSetting('regexRules', [...settings.regexRules, ...newRules]);
+    
+    if (skippedCount > 0) {
+      alert(`成功导入 ${newRules.length} 条酒馆正则规则\n跳过 ${skippedCount} 条重名规则`);
+    } else {
+      alert(`成功导入 ${newRules.length} 条酒馆正则规则`);
+    }
+  }, [settings.regexRules, updateSetting]);
+
+  return (
+    <div className="settings-panel">
+      {/* 标签页导航 */}
+      <div className="settings-tabs">
+        <button
+          className={`settings-tab ${activeTab === 'display' ? 'active' : ''}`}
+          onClick={() => setActiveTab('display')}
+        >
+          <Icons.Character size={16} />
+          <span>正文显示</span>
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'background' ? 'active' : ''}`}
+          onClick={() => setActiveTab('background')}
+        >
+          <Icons.Map size={16} />
+          <span>背景设置</span>
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'regex' ? 'active' : ''}`}
+          onClick={() => setActiveTab('regex')}
+        >
+          <Icons.Scroll size={16} />
+          <span>正则替换</span>
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'debug' ? 'active' : ''}`}
+          onClick={() => setActiveTab('debug')}
+        >
+          <Icons.Debug size={16} />
+          <span>调试</span>
+        </button>
+      </div>
+
+      {/* 设置内容区域 */}
+      <div className="settings-content">
+        {/* 正文显示设置 */}
+        {activeTab === 'display' && (
+          <div className="settings-section">
+            <h4 className="settings-section-title">
+              <span className="diamond-bullet"></span>
+              字体设置
+            </h4>
+
+            {/* 字体大小 */}
+            <div className="settings-row">
+              <label className="settings-label">字体大小</label>
+              <div className="settings-control">
+                <input
+                  type="range"
+                  min="12"
+                  max="24"
+                  step="1"
+                  value={settings.fontSize}
+                  onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))}
+                  className="settings-slider"
+                />
+                <span className="settings-value">{settings.fontSize}px</span>
+              </div>
+            </div>
+
+            {/* 字体颜色 */}
+            <div className="settings-row">
+              <label className="settings-label">字体颜色</label>
+              <div className="settings-control">
+                <input
+                  type="color"
+                  value={settings.fontColor}
+                  onChange={(e) => updateSetting('fontColor', e.target.value)}
+                  className="settings-color-picker"
+                />
+                <input
+                  type="text"
+                  value={settings.fontColor}
+                  onChange={(e) => updateSetting('fontColor', e.target.value)}
+                  className="settings-color-input"
+                  placeholder="#RRGGBB"
+                />
+              </div>
+            </div>
+
+            {/* 行高 */}
+            <div className="settings-row">
+              <label className="settings-label">行高</label>
+              <div className="settings-control">
+                <input
+                  type="range"
+                  min="1.2"
+                  max="2.5"
+                  step="0.1"
+                  value={settings.lineHeight}
+                  onChange={(e) => updateSetting('lineHeight', parseFloat(e.target.value))}
+                  className="settings-slider"
+                />
+                <span className="settings-value">{settings.lineHeight.toFixed(1)}</span>
+              </div>
+            </div>
+
+            {/* 预览区域 */}
+            <div className="settings-preview">
+              <div className="preview-label">预览效果</div>
+              <div
+                className="preview-text"
+                style={{
+                  fontSize: `${settings.fontSize}px`,
+                  color: settings.fontColor,
+                  lineHeight: settings.lineHeight,
+                }}
+              >
+                江湖路远，刀光剑影，恩怨情仇，尽在一念之间。
+                少侠且行且珍重，莫让红尘染白衣。
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 背景设置 */}
+        {activeTab === 'background' && (
+          <div className="settings-section">
+            <h4 className="settings-section-title">
+              <span className="diamond-bullet"></span>
+              背景设置
+            </h4>
+
+            {/* 背景颜色 */}
+            <div className="settings-row">
+              <label className="settings-label">背景颜色</label>
+              <div className="settings-control">
+                <input
+                  type="color"
+                  value={settings.backgroundColor}
+                  onChange={(e) => updateSetting('backgroundColor', e.target.value)}
+                  className="settings-color-picker"
+                />
+                <input
+                  type="text"
+                  value={settings.backgroundColor}
+                  onChange={(e) => updateSetting('backgroundColor', e.target.value)}
+                  className="settings-color-input"
+                  placeholder="#RRGGBB"
+                />
+              </div>
+            </div>
+
+            {/* 背景透明度 */}
+            <div className="settings-row">
+              <label className="settings-label">背景透明度</label>
+              <div className="settings-control">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.backgroundOpacity}
+                  onChange={(e) => updateSetting('backgroundOpacity', parseFloat(e.target.value))}
+                  className="settings-slider"
+                />
+                <span className="settings-value">{Math.round(settings.backgroundOpacity * 100)}%</span>
+              </div>
+            </div>
+
+            {/* 背景模糊度 */}
+            <div className="settings-row">
+              <label className="settings-label">背景模糊</label>
+              <div className="settings-control">
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  step="1"
+                  value={settings.backgroundBlur}
+                  onChange={(e) => updateSetting('backgroundBlur', parseInt(e.target.value))}
+                  className="settings-slider"
+                />
+                <span className="settings-value">{settings.backgroundBlur}px</span>
+              </div>
+            </div>
+
+            {/* 背景图片上传 */}
+            <div className="settings-row settings-row-vertical">
+              <label className="settings-label">背景图片</label>
+              <div className="settings-image-upload">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="settings-file-input"
+                  id="bg-image-input"
+                />
+                <label htmlFor="bg-image-input" className="settings-upload-btn">
+                  <Icons.Inventory size={16} />
+                  <span>选择图片</span>
+                </label>
+                {settings.backgroundImage && (
+                  <button
+                    className="settings-clear-btn"
+                    onClick={clearBackgroundImage}
+                  >
+                    <Icons.Close size={14} />
+                    <span>清除</span>
+                  </button>
+                )}
+              </div>
+              {settings.backgroundImage && (
+                <div className="settings-image-preview">
+                  <img src={settings.backgroundImage} alt="背景预览" />
+                </div>
+              )}
+              <p className="settings-hint">支持 JPG、PNG、GIF 格式，最大 5MB</p>
+            </div>
+          </div>
+        )}
+
+        {/* 正则替换设置 */}
+        {activeTab === 'regex' && (
+          <div className="settings-section">
+            <h4 className="settings-section-title">
+              <span className="diamond-bullet"></span>
+              正则替换规则
+            </h4>
+            <p className="settings-description">
+              使用正则表达式替换正文中的内容。规则按顺序执行。
+            </p>
+
+            {/* 规则列表 */}
+            <div className="regex-rules-list">
+              {settings.regexRules.length === 0 ? (
+                <div className="regex-empty">
+                  <Icons.Scroll size={32} />
+                  <p>暂无替换规则</p>
+                </div>
+              ) : (
+                settings.regexRules.map((rule, index) => (
+                  <RegexRuleItem
+                    key={rule.id}
+                    rule={rule}
+                    index={index}
+                    onUpdate={(updates) => updateRegexRule(rule.id, updates)}
+                    onDelete={() => deleteRegexRule(rule.id)}
+                    onToggle={() => toggleRegexRule(rule.id)}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* 按钮组 */}
+            <div className="regex-buttons-group">
+              {/* 添加规则按钮 */}
+              <button className="settings-add-btn" onClick={addRegexRule}>
+                <span className="add-icon">+</span>
+                <span>添加规则</span>
+              </button>
+
+              {/* 导入酒馆正则按钮 */}
+              <button className="settings-import-btn" onClick={handleImportTavernRegexes}>
+                <Icons.Scroll size={14} />
+                <span>导入酒馆正则</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 调试设置 */}
+        {activeTab === 'debug' && (
+          <div className="settings-section">
+            <h4 className="settings-section-title">
+              <span className="diamond-bullet"></span>
+              消息调试日志
+            </h4>
+            <p className="settings-description">
+              查看每次发送给 AI 的消息和 AI 回复的内容，帮助调试提示词和检查输出。
+            </p>
+
+            {/* 调试日志列表 */}
+            <div className="debug-logs-list">
+              {debugLogs.length === 0 ? (
+                <div className="debug-empty">
+                  <Icons.Debug size={32} />
+                  <p>暂无调试日志</p>
+                  <p className="debug-hint">发送消息后，日志将在此显示</p>
+                </div>
+              ) : (
+                debugLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className={`debug-log-item ${log.type === 'prompt' ? 'prompt' : 'assistant'} ${expandedLogId === log.id ? 'expanded' : ''}`}
+                  >
+                    <div
+                      className="debug-log-header"
+                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                    >
+                      <div className="debug-log-info">
+                        <span className={`debug-log-type ${log.type}`}>
+                          {log.type === 'prompt' ? '📤 完整提示词' : '📥 AI 回复'}
+                        </span>
+                        <span className="debug-log-time">
+                          {log.timestamp.toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
+                        </span>
+                        <span className="debug-log-length">
+                          {log.content.length} 字符
+                        </span>
+                      </div>
+                      <div className="debug-log-actions">
+                        <button
+                          className="debug-expand-btn"
+                          title={expandedLogId === log.id ? '收起' : '展开'}
+                        >
+                          {expandedLogId === log.id ? <Icons.ChevronDown size={18} /> : <Icons.ChevronUp size={18} />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* 预览内容（收起状态） */}
+                    {expandedLogId !== log.id && (
+                      <div className="debug-log-preview">
+                        {log.content.substring(0, 150)}
+                        {log.content.length > 150 && '...'}
+                      </div>
+                    )}
+                    
+                    {/* 完整内容（展开状态） */}
+                    {expandedLogId === log.id && (
+                      <div className="debug-log-body">
+                        <div className="debug-log-content">
+                          <pre>{log.content}</pre>
+                        </div>
+                        <div className="debug-log-footer">
+                          <button
+                            className="debug-copy-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(log.content);
+                              // 可以添加复制成功的提示
+                            }}
+                            title="复制内容"
+                          >
+                            复制全部
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 日志统计 */}
+            {debugLogs.length > 0 && (
+              <div className="debug-stats">
+                <span>共 {debugLogs.length} 条记录</span>
+                <span>•</span>
+                <span>提示词 {debugLogs.filter(l => l.type === 'prompt').length} 条</span>
+                <span>•</span>
+                <span>回复 {debugLogs.filter(l => l.type === 'assistant').length} 条</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 底部操作栏 */}
+      <div className="settings-footer">
+        <button className="settings-reset-btn" onClick={resetCurrentTab}>
+          <Icons.Close size={14} />
+          <span>{getResetButtonText()}</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 正则规则项组件
+ */
+interface RegexRuleItemProps {
+  rule: RegexRule;
+  index: number;
+  onUpdate: (updates: Partial<RegexRule>) => void;
+  onDelete: () => void;
+  onToggle: () => void;
+}
+
+const RegexRuleItem: React.FC<RegexRuleItemProps> = ({
+  rule,
+  index,
+  onUpdate,
+  onDelete,
+  onToggle,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false); // 默认收起
+  const validation = validateRegex(rule.pattern);
+
+  // 阻止事件冒泡
+  const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+
+  // 整个头部都可以点击展开/收起
+  const handleHeaderClick = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  return (
+    <div className={`regex-rule-item ${rule.enabled ? '' : 'disabled'}`}>
+      <div className="regex-rule-header" onClick={handleHeaderClick}>
+        <div className="regex-rule-info" onClick={stopPropagation}>
+          <button
+            className={`regex-toggle-btn ${rule.enabled ? 'active' : ''}`}
+            onClick={onToggle}
+            title={rule.enabled ? '点击禁用' : '点击启用'}
+          >
+            {rule.enabled ? <Icons.ToggleRight size={20} /> : <Icons.ToggleLeft size={20} />}
+          </button>
+          <span className="regex-rule-index">规则 {index + 1}</span>
+          {rule.description && (
+            <span className="regex-rule-desc" title={rule.description}>{rule.description}</span>
+          )}
+        </div>
+        <div className="regex-rule-actions">
+          <button
+            className="regex-expand-btn"
+            title={isExpanded ? '收起' : '展开'}
+          >
+            {isExpanded ? <Icons.ChevronDown size={18} /> : <Icons.ChevronUp size={18} />}
+          </button>
+          <button
+            className="regex-delete-btn"
+            onClick={(e) => {
+              stopPropagation(e);
+              onDelete();
+            }}
+            title="删除规则"
+          >
+            <Icons.Close size={16} />
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="regex-rule-body">
+          {/* 描述 */}
+          <div className="regex-field">
+            <label>描述（可选）</label>
+            <input
+              type="text"
+              value={rule.description || ''}
+              onChange={(e) => onUpdate({ description: e.target.value })}
+              placeholder="例如：移除思考过程"
+              className="regex-input"
+            />
+          </div>
+
+          {/* 正则模式 */}
+          <div className="regex-field">
+            <label>正则表达式</label>
+            <input
+              type="text"
+              value={rule.pattern}
+              onChange={(e) => onUpdate({ pattern: e.target.value })}
+              placeholder="例如：/<thinks>.*?<\/thinks>/gs"
+              className={`regex-input ${!validation.valid ? 'invalid' : ''}`}
+            />
+            {!validation.valid && (
+              <span className="regex-error">{validation.error}</span>
+            )}
+          </div>
+
+          {/* 替换文本 */}
+          <div className="regex-field">
+            <label>替换为</label>
+            <input
+              type="text"
+              value={rule.replacement}
+              onChange={(e) => onUpdate({ replacement: e.target.value })}
+              placeholder="留空即为删除"
+              className="regex-input"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SettingsPanel;

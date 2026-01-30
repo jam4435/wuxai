@@ -1,0 +1,210 @@
+后续优化问题详情
+以下是建议在新窗口中处理的问题，按优先级排序：
+
+🟠 问题 1：展开状态三重存储
+严重程度：中等
+影响：展开/折叠功能偶发异常，滚动后状态丢失
+
+问题描述：
+展开状态同时存储在三个地方，虚拟滚动重渲染时需要手动同步，容易不一致：
+
+
+// 1. state.js 中的 Set
+expandedEntries[lorebookName].has(uid)
+
+// 2. DOM 属性
+$entry.attr('data-expanded')
+
+// 3. CSS 显示状态
+$entry.find('.entry-expand-area').is(':visible')
+涉及文件：
+
+state.js:104-127 - toggleEntryExpanded
+list.js:316-360 - clusterChanged 回调中的同步逻辑
+events.js:896-940 - expand action 处理
+建议方案：
+创建 modules/ui/expandManager.js 统一管理：
+
+
+// expandManager.js
+import { isEntryExpanded, toggleEntryExpanded } from '../state.js';
+
+/**
+ * 同步展开状态到 DOM（单一数据源：state.js）
+ */
+export function syncExpandState($entry, lorebookName, uid, styleHeight) {
+  const isExpanded = isEntryExpanded(lorebookName, uid);
+  
+  $entry.attr('data-expanded', isExpanded ? 'true' : 'false');
+  $entry.css('height', isExpanded ? 'auto' : `${styleHeight}px`);
+  $entry.find('.entry-expand-area').toggle(isExpanded);
+  $entry.find('.small-expand-button i')
+    .toggleClass('fa-chevron-up', isExpanded)
+    .toggleClass('fa-chevron-down', !isExpanded);
+  
+  return isExpanded;
+}
+
+/**
+ * 设置展开状态并同步 DOM
+ */
+export function setExpanded($entry, lorebookName, uid, expanded, styleHeight) {
+  toggleEntryExpanded(lorebookName, uid, expanded);
+  return syncExpandState($entry, lorebookName, uid, styleHeight);
+}
+然后在 list.js 和 events.js 中统一调用这个模块。
+
+🟠 问题 2：events.js 过于庞大
+严重程度：中等
+
+影响：难以维护、无法单元测试、任何改动都可能引入bug
+
+问题描述：
+events.js 有 1671 行，单个事件处理器超过 1000 行的switch-case：
+
+
+// events.js:275-1234-巨大的事件委托处理器
+$panel.on('click.lorebookAction...', '[data-action]', async function(e) {
+  switch (action) {
+    case 'toggle-entry': ...
+    case 'delete-entries': ...
+    case 'expand': ...
+    // 50+ 个 case，每个几十行
+  }
+});
+建议方案：
+使用命令模式拆分：
+
+
+modules/
+├── events.js              # 简化为事件分发器 (~100行)
+└── commands/
+    ├── index.js           # 命令注册中心
+    ├── entryCommands.js   # 条目操作命令
+    ├── batchCommands.js   # 批量操作命令
+    ├── filterCommands.js  # 筛选命令
+    └── globalCommands.js  # 全局世界书命令
+
+// commands/index.js
+const commandHandlers = {};
+
+export function registerCommand(action, handler) {
+  commandHandlers[action] = handler;
+}
+
+export async function dispatchCommand(action, context) {
+  const handler = commandHandlers[action];
+  if (!handler) {
+    console.warn(`未知操作: ${action}`);
+    return;
+  }
+  return handler(context);
+}
+
+// commands/entryCommands.js
+import { registerCommand } from './index.js';
+
+registerCommand('expand', async ({ $item, lorebookName, uid }) => {
+  // 展开逻辑
+});
+
+registerCommand('toggle-entry', async ({ $item, lorebookName, uid, isGlobal }) => {
+  // 切换启用逻辑
+});
+
+// events.js 简化为
+$panel.on('click.lorebookAction', '[data-action]', async function(e) {
+  const action = $(this).data('action');
+  await dispatchCommand(action, {
+    event: e, 
+    $el: $(this), 
+    lorebookName, 
+    isGlobal 
+  });
+});
+🟡 问题 3：API 错误被静默吞没
+严重程度：低
+
+影响：调用者无法区分"世界书为空"和"API 调用失败"
+
+问题描述：
+api.js:100-117 中所有错误都返回空数组：
+
+
+export const getWorldbookSafe = errorCatched(async worldbookName => {
+  try {
+    const entries = await getWorldbook(worldbookName);
+    return entries || [];
+  } catch (error) {
+    console.error(`获取世界书失败`, error);
+    return []; // 调用者无法知道是失败还是真的为空
+  }
+}, 'getWorldbook');
+建议方案：
+使用 Result 模式：
+
+
+/**
+ * @typedef {Object} ApiResult
+ * @property {boolean} success - 是否成功
+ * @property {any} data - 返回数据
+ * @property {Error} [error] - 错误对象（失败时）
+ */
+
+export const getWorldbookSafe = errorCatched(async worldbookName => {
+  if (!worldbookName) {
+    return { success: false, error: new Error('未提供世界书名'), data: [] };
+  }
+  
+  try {
+    const entries = await getWorldbook(worldbookName);
+    return { success: true, data: entries || [] };
+  } catch (error) {
+    console.error(`获取世界书失败: ${worldbookName}`, error);
+    return { success: false, error, data: [] };
+  }
+}, 'getWorldbook');
+
+// 调用方可以区分
+const result = await getWorldbookSafe('myBook');
+if (!result.success) {
+  toastr.error('加载世界书失败，请重试');
+  return;
+}
+const entries = result.data;
+🟡 问题 4：虚拟滚动高度计算脆弱
+严重程度：低
+
+影响：HTML 结构改变可能导致高度计算错误
+
+问题描述：
+list.js:244-298 依赖正则替换强制折叠状态：
+
+
+// 非常脆弱的实现
+sampleHtml = sampleHtml.replace(/data-expanded=\"true\"/g, 'data-expanded=\"false\"');
+建议方案：
+使用 DOM 操作替代字符串替换：
+
+
+function measureCollapsedHeight(entry, lorebookName) {
+  // 创建临时容器
+  const $temp = $('<div>')
+    .css({ position: 'absolute', visibility: 'hidden', left: '-9999px' })
+    .appendTo('body');
+  
+  // 插入 HTML
+  $temp.html(createEntryHtml(entry, lorebookName));
+  
+  // 使用 DOM API 确保折叠状态
+  const $entry = $temp.find('.lorebook-entry-item');
+  $entry.attr('data-expanded', 'false');
+  $entry.find('.entry-expand-area').hide();
+  
+  // 测量高度
+  const height = $entry.outerHeight();
+  // 清理
+  $temp.remove();
+  
+  return height;
+}

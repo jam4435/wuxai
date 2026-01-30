@@ -1,0 +1,11 @@
+{
+  "name": "角色卡查重",
+  "version": "1.0.0",
+  "description": "检测并管理重名的角色卡和世界书",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
