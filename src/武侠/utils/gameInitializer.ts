@@ -21,7 +21,8 @@ import {
 import { initLogger } from './logger';
 
 // 从天赋数据库导入天赋相关内容，并重新导出供其他模块使用
-export { CHARACTER_TRAITS, getTriggeredTraitsByAttribute } from './traitsDatabase';
+import { CHARACTER_TRAITS, getTriggeredTraitsByAttribute } from './traitsDatabase';
+export { CHARACTER_TRAITS, getTriggeredTraitsByAttribute };
 
 // 从 data 文件夹导入静态数据
 import eventsData from '../data/事件信息汇总.json';
@@ -210,6 +211,7 @@ export interface NewGameFormData {
   initialAttributes: InitialAttributes;
   martialArtId: string;
   selectedMartialArts?: string[];
+  selectedTraits?: string[]; // 选择的天赋名称列表
   originItems?: Record<string, OriginItemInfo>;
   originMartialArts?: { name: string; mastery: string }[];
   origin: string;
@@ -243,6 +245,7 @@ export function generateVariableData(formData: NewGameFormData): Record<string, 
     initialAttributes,
     martialArtId,
     selectedMartialArts,
+    selectedTraits,
     originItems,
     originMartialArts,
     origin,
@@ -285,6 +288,26 @@ export function generateVariableData(formData: NewGameFormData): Record<string, 
         rank: selectedMartialArt.rank,
         mastery: selectedMartialArt.mastery,
       };
+    }
+  }
+
+  // 处理天赋数据：将选择的天赋转换为键值对（天赋名：天赋描述）
+  const traitsObj: Record<string, string> = {};
+  if (selectedTraits && selectedTraits.length > 0) {
+    // 添加选择的天赋
+    for (const traitName of selectedTraits) {
+      const trait = CHARACTER_TRAITS.find(t => t.name === traitName);
+      if (trait) {
+        traitsObj[trait.name] = trait.description;
+      }
+    }
+  }
+
+  // 添加属性触发的天赋（无论是否选择了天赋都要检查）
+  for (const key of Object.keys(initialAttributes) as Array<keyof InitialAttributes>) {
+    const triggeredTraits = getTriggeredTraitsByAttribute(key, initialAttributes[key]);
+    for (const trait of triggeredTraits) {
+      traitsObj[trait.name] = trait.description;
     }
   }
 
@@ -355,6 +378,9 @@ export function generateVariableData(formData: NewGameFormData): Record<string, 
       },
       初始属性: {
         ...initialAttributes,
+      },
+      天赋: {
+        ...traitsObj,
       },
       属性: {
         气血: `${resources.气血上限}/${resources.气血上限}`,

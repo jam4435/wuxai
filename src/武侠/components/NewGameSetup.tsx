@@ -837,6 +837,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
       initialAttributes: attributes,
       martialArtId: selectedMartialArts.length > 0 ? selectedMartialArts[0] : '',
       selectedMartialArts: selectedMartialArts, // 新版：传递所有已选功法名称列表
+      selectedTraits: selectedTraits, // 传递选择的天赋列表
       origin,
       originId: selectedOrigin,
       customRealm: selectedOrigin === 'custom' ? customRealm : undefined,
@@ -845,7 +846,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
     });
   }, [name, gender, appearance, age, useEventLocation, selectedEvent,
       customYear, customMonth, customDay, customLocation, attributes,
-      selectedMartialArts, selectedOrigin, customOrigin, customRealm, onSubmit, validateIdentityInfo]);
+      selectedMartialArts, selectedTraits, selectedOrigin, customOrigin, customRealm, onSubmit, validateIdentityInfo]);
 
   // 随机生成外貌（包含身材描述）
   const randomAppearance = () => {
