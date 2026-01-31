@@ -1011,6 +1011,54 @@ export async function autoUpdateCharacterAttributes(角色数据?: Record<string
   const allKeys = Object.keys(角色数据);
   dataLogger.log('[autoUpdateCharacterAttributes] 角色数据所有键:', allKeys);
 
+  // ============ 优化：快速缓存预检查 ============
+  // 在遍历所有角色之前，先快速检查是否有任何角色需要更新
+  // 这样可以避免在没有变化时进行不必要的遍历
+  let hasAnyPotentialUpdate = false;
+
+  for (const [角色名, 角色] of Object.entries(角色数据)) {
+    // 跳过模板和非对象数据
+    if (角色名.startsWith('$')) {
+      continue;
+    }
+    if (typeof 角色 !== 'object' || 角色 === null) {
+      continue;
+    }
+
+    const 角色Data = 角色 as CharacterData;
+
+    // 没有初始属性的角色无法计算战斗属性
+    if (!角色Data.初始属性) {
+      continue;
+    }
+
+    const cacheKey = getCharacterCacheKey(false, 角色名);
+    const currentRealm = 角色Data.境界 || '不入流';
+    const cached = characterStateCache.get(cacheKey);
+
+    // 检查是否是新角色或境界发生变化
+    if (!cached || cached.realm !== currentRealm) {
+      hasAnyPotentialUpdate = true;
+      break; // 找到一个需要更新的角色，立即退出预检查
+    }
+  }
+
+  // 如果没有任何角色需要更新，直接返回
+  if (!hasAnyPotentialUpdate) {
+    dataLogger.log('[autoUpdateCharacterAttributes] 快速预检查：所有角色境界无变化，跳过更新');
+
+    // 即使没有境界变化，也需要确保缓存已初始化（首次加载场景）
+    // 只在缓存为空时才进行完整检查
+    if (characterStateCache.size === 0) {
+      dataLogger.log('[autoUpdateCharacterAttributes] 缓存为空，进行首次初始化检查');
+    } else {
+      return; // 缓存已存在且无变化，直接返回
+    }
+  } else {
+    dataLogger.log('[autoUpdateCharacterAttributes] 快速预检查：检测到角色变化，继续完整检查');
+  }
+  // ============ 优化结束 ============
+
   // 分别收集需要 insert（属性不存在）和 update（属性存在但需要重算）的角色
   const needsInsert: Array<{ 角色名: string; 属性: CalculatedCharacterAttributes }> = [];
   const needsUpdateList: Array<{ 角色名: string; 属性: CalculatedCharacterAttributes }> = [];
