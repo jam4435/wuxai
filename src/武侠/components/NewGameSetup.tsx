@@ -427,12 +427,21 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
    */
   const handleSaveBuild = useCallback(() => {
     try {
+      // 询问用户是否添加备注
+      const note = window.prompt('为这个存档添加备注（可选）：\n用于区分同名角色，例如：剑客、医师、反派等', '');
+
+      // 如果用户点击取消，note 为 null，则不保存
+      if (note === null) {
+        return;
+      }
+
       // 获取当前事件（使用 selectedEventId 直接查找，避免依赖问题）
       const currentEvent = STORY_EVENTS.find(e => e.id === selectedEventId);
-      
+
       const newBuild: CharacterBuild = {
         id: `build_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: name.trim() || `未命名角色_${new Date().toLocaleDateString()}`,
+        note: note.trim() || undefined, // 保存备注，空字符串则不保存
         createdAt: Date.now(),
         talentTier: selectedTalentId,
         attributes: { ...attributes },
@@ -458,7 +467,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
           age,
         },
       };
-      
+
       const updatedBuilds = [...savedBuilds, newBuild];
       localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(updatedBuilds));
       setSavedBuilds(updatedBuilds);
@@ -560,7 +569,7 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
     if (!window.confirm(confirmMessage)) {
       return;
     }
-    
+
     try {
       const updatedBuilds = savedBuilds.filter(b => b.id !== buildId);
       localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(updatedBuilds));
@@ -569,6 +578,32 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
     } catch (e) {
       console.error('删除存档失败:', e);
       showNotification('error', '删除存档失败');
+    }
+  }, [savedBuilds, showNotification]);
+
+  /**
+   * 编辑存档备注
+   */
+  const handleEditNote = useCallback((buildId: string, currentNote: string) => {
+    const newNote = window.prompt('编辑备注：\n用于区分同名角色，例如：剑客、医师、反派等', currentNote);
+
+    // 如果用户点击取消，newNote 为 null，则不修改
+    if (newNote === null) {
+      return;
+    }
+
+    try {
+      const updatedBuilds = savedBuilds.map(b =>
+        b.id === buildId
+          ? { ...b, note: newNote.trim() || undefined }
+          : b
+      );
+      localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(updatedBuilds));
+      setSavedBuilds(updatedBuilds);
+      showNotification('success', '备注已更新');
+    } catch (e) {
+      console.error('更新备注失败:', e);
+      showNotification('error', '更新备注失败');
     }
   }, [savedBuilds, showNotification]);
 
@@ -982,6 +1017,11 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                       <div key={buildItem.id} className="saved-build-item">
                         <div className="build-info">
                           <span className="build-name">{buildItem.name}</span>
+                          {buildItem.note && (
+                            <span className="build-note" title={buildItem.note}>
+                              {buildItem.note}
+                            </span>
+                          )}
                           <span className="build-talent">
                             {TALENT_TIERS.find(t => t.id === buildItem.talentTier)?.name || buildItem.talentTier}
                           </span>
@@ -997,6 +1037,14 @@ const NewGameSetup: React.FC<NewGameSetupProps> = ({ onSubmit, onBack, isLoading
                             title="加载此存档"
                           >
                             加载
+                          </button>
+                          <button
+                            type="button"
+                            className="edit-note-btn"
+                            onClick={() => handleEditNote(buildItem.id, buildItem.note || '')}
+                            title="编辑备注"
+                          >
+                            ✏️
                           </button>
                           <button
                             type="button"
