@@ -455,15 +455,15 @@ function formatGameTime(worldTime?: WorldTime): string {
 function parseInitialAttributes(用户档案?: UserProfile): InitialAttributes {
   const initialAttrs = 用户档案?.初始属性;
   dataLogger.log('[variableReader] Step 4a - 初始属性原始数据:', initialAttrs);
-  const result = {
-    // 从初始属性读取全部7维
-    brawn: initialAttrs?.臂力 ?? 10,
-    root: initialAttrs?.根骨 ?? 10,
-    agility: initialAttrs?.机敏 ?? 10,
-    savvy: initialAttrs?.悟性 ?? 10,
-    insight: initialAttrs?.洞察 ?? 10,
-    charisma: initialAttrs?.风姿 ?? 10,
-    luck: initialAttrs?.福缘 ?? 0,
+  const result: InitialAttributes = {
+    // 从初始属性读取全部7维（使用中文键名）
+    臂力: initialAttrs?.臂力 ?? 10,
+    根骨: initialAttrs?.根骨 ?? 10,
+    机敏: initialAttrs?.机敏 ?? 10,
+    悟性: initialAttrs?.悟性 ?? 10,
+    洞察: initialAttrs?.洞察 ?? 10,
+    风姿: initialAttrs?.风姿 ?? 10,
+    福缘: initialAttrs?.福缘 ?? 0,
   };
   dataLogger.log('[variableReader] Step 4b - 初始属性解析结果:', result);
   return result;

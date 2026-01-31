@@ -151,7 +151,7 @@ const App: React.FC = () => {
     initializeApp().catch(error => {
       initLogger.error('❌ 初始化失败:', error);
     });
-  }, [setSavedGameExists, setGameState, setCurrentMaintext, setCurrentOptions, setCurrentPage]);
+  }, []); // 空依赖数组，只在组件挂载时执行一次。React 的 setState 函数引用是稳定的，不需要放在依赖数组中
 
   // 初始化并应用设置到 DOM
   useEffect(() => {
