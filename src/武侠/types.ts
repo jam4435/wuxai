@@ -319,6 +319,7 @@ export interface OriginOption {
 export interface CharacterBuild {
   id: string;
   name: string;
+  note?: string; // 备注信息，用于区分同名角色
   createdAt: number;
   talentTier: string;
   attributes: InitialAttributes;
