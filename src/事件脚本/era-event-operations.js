@@ -538,3 +538,240 @@ export async function playerJoinsEvent(eventName, eventData) {
     console.groupEnd();
   }
 }
+
+// ==================== 批量结束事件并应用差分 ====================
+export async function batchEndEvents(eventNames, eventDefinitions) {
+  if (eventNames.length === 0) return;
+
+  console.group(`⏹️ 批量结算事件 (${eventNames.length}个)`);
+
+  try {
+    const currentVars = await getVariables({ type: 'chat' });
+    const statData = currentVars.stat_data;
+    const 参与事件 = statData.参与事件 || {};
+
+    // 收集所有需要应用的差分
+    const 合并后的差分 = {
+      insert: {},
+      update: {},
+      delete: {},
+    };
+
+    const 已完成事件对象 = {};
+    const 进行中删除对象 = {};
+    const 参与删除对象 = {};
+
+    // 遍历所有要结束的事件，合并差分
+    for (const eventName of eventNames) {
+      const eventData = eventDefinitions[eventName];
+      if (!eventData) {
+        logWarning(`事件定义未找到: ${eventName}`);
+        continue;
+      }
+
+      // 步骤 1: 明确判断玩家是否参与
+      const playerParticipated = eventName in 参与事件;
+      log(`事件 ${eventName}: 玩家是否参与? ${playerParticipated}`);
+
+      // 步骤 2: 根据玩家参与状态决定数据源
+      const eventDataSource = eventData; // 数据源始终是完整的事件定义
+
+      // 步骤 3: 循环应用差分
+      for (const actionKey of ['insert', 'update', 'delete']) {
+        // 根据是否参与，决定使用哪个差分键 (e.g., 'P-insert' or 'insert')
+        const playerActionKey = `P-${actionKey}`;
+        let delta = {};
+
+        if (playerParticipated && eventDataSource[playerActionKey]) {
+          delta = eventDataSource[playerActionKey];
+          log(`  └─ 使用玩家参与版差分 [${playerActionKey}]`);
+        } else {
+          delta = eventDataSource[actionKey] || {};
+        }
+
+        for (const charName in delta) {
+          // ✅ insert 操作：允许新增角色，不检查是否存在
+          if (actionKey === 'insert') {
+            if (!合并后的差分.insert[charName]) {
+              合并后的差分.insert[charName] = {};
+            }
+            Object.assign(合并后的差分.insert[charName], delta[charName]);
+            log(`[INSERT] 准备新增角色: ${charName}`);
+          }
+          // ✅ update/delete 操作：必须角色已存在
+          else {
+            if (!statData.角色数据 || !statData.角色数据[charName]) {
+              logWarning(`角色 ${charName} 不存在，跳过 ${actionKey}`);
+              continue;
+            }
+
+            if (!合并后的差分[actionKey][charName]) {
+              合并后的差分[actionKey][charName] = {};
+            }
+            Object.assign(合并后的差分[actionKey][charName], delta[charName]);
+          }
+        }
+      }
+
+      // 准备状态变更数据
+      已完成事件对象[eventName] = playerParticipated ? 1 : 0;
+      进行中删除对象[eventName] = {};
+
+      if (playerParticipated) {
+        参与删除对象[eventName] = {};
+      }
+    }
+
+    // 1. 批量应用角色数据差分
+    console.group('🔄 批量应用人物差分');
+    await applyEventDiff(合并后的差分);
+    console.groupEnd();
+
+    // 2. 批量将事件移至"已完成"
+    const completedPayload = {
+      事件系统: {
+        已完成事件: 已完成事件对象,
+      },
+    };
+    log('🚀 2. 发送 era:insertByObject 指令 (批量移至已完成):', completedPayload);
+    eventEmit('era:insertByObject', completedPayload);
+    await new Promise(resolve => eventOnce('era:writeDone', resolve));
+    log('✅ 步骤2完成: 批量移至已完成');
+
+    // 3. 批量从"进行中"删除
+    const deleteInProgressPayload = {
+      事件系统: {
+        进行中事件: 进行中删除对象,
+      },
+    };
+    log('🚀 3. 发送 era:deleteByObject 指令 (批量从进行中删除):', deleteInProgressPayload);
+    eventEmit('era:deleteByObject', deleteInProgressPayload);
+    await new Promise(resolve => eventOnce('era:writeDone', resolve));
+    log('✅ 步骤3完成: 批量从进行中删除');
+
+    // 4. 如果有玩家参与的事件，批量从"参与事件"中删除
+    if (Object.keys(参与删除对象).length > 0) {
+      const deleteParticipationPayload = {
+        参与事件: 参与删除对象,
+      };
+      log('🚀 4. 发送 era:deleteByObject 指令 (批量从参与事件中删除):', deleteParticipationPayload);
+      eventEmit('era:deleteByObject', deleteParticipationPayload);
+      await new Promise(resolve => eventOnce('era:writeDone', resolve));
+      log('✅ 步骤4完成: 批量从参与事件中删除');
+    }
+
+    // 验证操作后的状态
+    const verifyVars = await getVariables({ type: 'chat' });
+    console.groupCollapsed('🔍 批量结算后的完整状态');
+    console.log(JSON.parse(JSON.stringify(verifyVars?.stat_data || {})));
+    console.groupEnd();
+
+    logSuccess(`批量结算完成 ${eventNames.length} 个事件:`, eventNames);
+
+    // ==================== 生成事件后续 ====================
+    await generateFollowupEvents(eventNames, eventDefinitions);
+
+    // 显示通知（限制数量避免刷屏）
+    if (eventNames.length <= 5) {
+      eventNames.forEach(name => {
+        toastr.success(`✅ 事件完成: ${name}`, '', { timeOut: 2000 });
+      });
+    } else {
+      toastr.success(`✅ ${eventNames.length} 个事件已完成`, '', { timeOut: 3000 });
+    }
+  } catch (error) {
+    logError(`批量结算事件失败`, error);
+  }
+
+  console.groupEnd();
+}
+
+// ==================== 生成事件后续 ====================
+async function generateFollowupEvents(eventNames, eventDefinitions) {
+  console.group('🔗 生成事件后续');
+
+  // 初始化后续事件payload
+  const followupPayload = {};
+  const followupCountPayload = {};
+
+  // 遍历本次完成的eventNames数组
+  for (const eventName of eventNames) {
+    // 检查eventDefinitions[eventName].后续事件是否存在
+    if (eventDefinitions[eventName] && eventDefinitions[eventName].后续事件) {
+      // 获取来源事件的简化名，构建key (e.g., `${shortName}的后续`)
+      const shortName = getEventShortName(eventName);
+      const key = `${shortName}的后续`;
+
+      // 从后续事件对象中提取描述和事件名
+      const followupInfo = eventDefinitions[eventName].后续事件;
+
+      // 步骤 1: 处理目标事件名
+      let targetEventKey = followupInfo.事件名;
+
+      // 移除可能存在的 .json 后缀
+      if (targetEventKey.endsWith('.json')) {
+        targetEventKey = targetEventKey.slice(0, -5);
+      }
+
+      // 步骤 2: 尝试在事件定义中查找
+      // 优先直接匹配完整名称（支持新格式如 "射雕事件条目-xxx"）
+      // 如果找不到，再尝试移除精确前缀后匹配（向后兼容旧格式）
+      if (!eventDefinitions[targetEventKey]) {
+        const matchedPrefix = CONFIG.EVENT_KEY_PREFIXES.find(prefix => targetEventKey.startsWith(prefix));
+        if (matchedPrefix) {
+          const shortKey = targetEventKey.substring(matchedPrefix.length);
+          if (eventDefinitions[shortKey]) {
+            targetEventKey = shortKey;
+          }
+        }
+      }
+
+      const description = followupInfo.描述 || '';
+
+      // 在所有事件定义中查找目标事件
+      const targetEventData = eventDefinitions[targetEventKey];
+
+      if (targetEventData) {
+        const time = targetEventData.触发条件;
+        const location = targetEventData.事件地点;
+        const timeString = formatDate(time);
+
+        // 优化后的字符串拼接格式
+        const formattedDescription = `(${timeString}，${location}，似乎还会有事情发生)${description}`;
+
+        // 填充两个payload
+        followupPayload[key] = formattedDescription;
+        followupCountPayload[key] = CONFIG.DEFAULT_FOLLOWUP_LIFETIME; // 使用全局常量
+      }
+
+      log(`为事件 ${eventName} 生成后续: ${key}`);
+    }
+  }
+
+  // 循环结束后，如果payload不为空，则发送两次era:insertByObject指令
+  if (Object.keys(followupPayload).length > 0) {
+    // 写入后续事件线索
+    const followupEventPayload = {
+      后续事件线索: followupPayload,
+    };
+
+    log('🚀 发送 era:insertByObject 指令 (写入后续事件线索):', followupEventPayload);
+    eventEmit('era:insertByObject', followupEventPayload);
+    await new Promise(resolve => eventOnce('era:writeDone', resolve));
+    logSuccess(`✅ 已写入 ${Object.keys(followupPayload).length} 个后续事件线索`);
+
+    // 写入后续事件线索计数
+    const followupCountEventPayload = {
+      后续事件线索计数: followupCountPayload,
+    };
+
+    log('🚀 发送 era:insertByObject 指令 (写入后续事件线索计数):', followupCountEventPayload);
+    eventEmit('era:insertByObject', followupCountEventPayload);
+    await new Promise(resolve => eventOnce('era:writeDone', resolve));
+    logSuccess(`✅ 已写入 ${Object.keys(followupCountPayload).length} 个后续事件线索计数`);
+  } else {
+    log('没有需要生成的后续事件');
+  }
+
+  console.groupEnd();
+}
