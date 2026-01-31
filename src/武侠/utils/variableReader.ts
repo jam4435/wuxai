@@ -20,8 +20,6 @@ import type {
 
 import {
     calculateAllAttributes,
-    convertToChineseInitialAttributes,
-    type InitialAttributes as ChineseInitialAttributes,
     type MartialArtForCalculation,
 } from './attributeCalculator';
 import {
@@ -1694,15 +1692,15 @@ function mapVariablesToGameState(variables: GameVariables): Partial<GameState> {
     }
 
     // 使用 attributeCalculator 计算战斗属性和资源属性
-    const chineseInitialAttrs: ChineseInitialAttributes = convertToChineseInitialAttributes(initialAttrs);
+    // initialAttrs 已经是中文键名的 InitialAttributes
     const realm = 用户档案.境界 || '不入流';
 
     dataLogger.log('[variableReader] Step 4a - 开始计算属性');
-    dataLogger.log('[variableReader] Step 4b - 中文初始属性:', chineseInitialAttrs);
+    dataLogger.log('[variableReader] Step 4b - 初始属性:', initialAttrs);
     dataLogger.log('[variableReader] Step 4c - 境界:', realm);
     dataLogger.log('[variableReader] Step 4d - 功法计算数据:', martialArtsForCalc);
 
-    const { combat, resources } = calculateAllAttributes(chineseInitialAttrs, realm, martialArtsForCalc);
+    const { combat, resources } = calculateAllAttributes(initialAttrs, realm, martialArtsForCalc);
 
     dataLogger.log('[variableReader] Step 4e - 计算后的战斗属性:', combat);
     dataLogger.log('[variableReader] Step 4f - 计算后的资源属性:', resources);
