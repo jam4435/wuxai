@@ -882,3 +882,314 @@
   color: $stone-500;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+// =========================================
+// 自动总结设置
+// =========================================
+
+.summary-section {
+  .settings-row {
+    flex-wrap: wrap;
+  }
+}
+
+.summary-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid $stone-700;
+  color: $stone-500;
+  cursor: pointer;
+  transition: all $transition-normal;
+  border-radius: 4px;
+
+  &:hover {
+    border-color: $stone-600;
+    color: $stone-400;
+  }
+
+  &.active {
+    border-color: $green-500;
+    color: $green-500;
+    background: rgba($green-500, 0.1);
+
+    &:hover {
+      background: rgba($green-500, 0.15);
+    }
+  }
+}
+
+.summary-subsection {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.summary-subsection-title {
+  font-size: 0.9rem;
+  color: $stone-300;
+  margin: 0 0 1rem 0;
+  font-weight: normal;
+  font-family: $font-serif;
+}
+
+// 文本输入框
+.settings-text-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  background: $stone-900;
+  border: 1px solid $stone-700;
+  border-radius: 4px;
+  color: $stone-200;
+  font-size: 0.85rem;
+
+  &::placeholder {
+    color: $stone-600;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: $amber-600;
+  }
+}
+
+// 数字输入框
+.settings-number-input {
+  width: 80px;
+  padding: 0.5rem 0.75rem;
+  background: $stone-900;
+  border: 1px solid $stone-700;
+  border-radius: 4px;
+  color: $stone-200;
+  font-size: 0.85rem;
+  text-align: center;
+
+  &:focus {
+    outline: none;
+    border-color: $amber-600;
+  }
+
+  // 隐藏数字输入框的上下箭头
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  -moz-appearance: textfield;
+}
+
+// 下拉选择框
+.settings-select {
+  min-width: 120px;
+  padding: 0.5rem 0.75rem;
+  background: $stone-900;
+  border: 1px solid $stone-700;
+  border-radius: 4px;
+  color: $stone-200;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: $amber-600;
+  }
+
+  option {
+    background: $stone-900;
+    color: $stone-200;
+  }
+}
+
+// 行内提示
+.settings-hint-inline {
+  font-size: 0.75rem;
+  color: $stone-600;
+  margin-left: 0.5rem;
+}
+
+// 文本域
+.settings-textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 0.75rem;
+  background: $stone-900;
+  border: 1px solid $stone-700;
+  border-radius: 4px;
+  color: $stone-200;
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+
+  &::placeholder {
+    color: $stone-600;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: $amber-600;
+  }
+}
+
+// 重置模板按钮
+.settings-reset-template-btn {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: 1px solid $stone-700;
+  color: $stone-500;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all $transition-normal;
+
+  &:hover {
+    border-color: $amber-600;
+    color: $amber-600;
+  }
+}
+
+// 操作按钮组
+.summary-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.settings-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: transparent;
+  border: 1px solid $stone-700;
+  color: $stone-400;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all $transition-normal;
+  border-radius: 4px;
+
+  &:hover:not(:disabled) {
+    border-color: $stone-600;
+    color: $stone-300;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.primary {
+    background: rgba($amber-600, 0.1);
+    border-color: $amber-600;
+    color: $amber-600;
+
+    &:hover:not(:disabled) {
+      background: rgba($amber-600, 0.2);
+      color: $yellow-500;
+    }
+  }
+}
+
+// 状态显示
+.summary-status,
+.summary-result {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid $stone-800;
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.summary-status-header,
+.summary-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.9rem;
+  color: $stone-300;
+}
+
+.summary-status-badge,
+.summary-result-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+
+  &.ok {
+    background: rgba($green-500, 0.1);
+    color: $green-500;
+  }
+
+  &.warning {
+    background: rgba($amber-600, 0.1);
+    color: $amber-600;
+  }
+
+  &.success {
+    background: rgba($green-500, 0.1);
+    color: $green-500;
+  }
+}
+
+.summary-status-body,
+.summary-result-body {
+  padding: 0.75rem;
+}
+
+.summary-status-item,
+.summary-result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  color: $stone-400;
+
+  strong {
+    color: $stone-200;
+  }
+
+  &.success strong {
+    color: $green-500;
+  }
+
+  &.failed strong {
+    color: $red-500;
+  }
+}
+
+.summary-pending-list {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.85rem;
+  color: $stone-400;
+
+  ul {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.5rem;
+    list-style: disc;
+
+    li {
+      padding: 0.25rem 0;
+      color: $stone-300;
+    }
+  }
+}
+
+.summary-result {
+  &.success {
+    border-color: rgba($green-500, 0.3);
+  }
+
+  &.partial {
+    border-color: rgba($amber-600, 0.3);
+  }
+}

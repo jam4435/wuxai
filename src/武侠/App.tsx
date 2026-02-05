@@ -23,6 +23,7 @@ import {
   useGameState,
   useMessageHandler,
   usePageFlow,
+  useSummaryDetection,
   useToast,
 } from './hooks';
 import { ActivePanel } from './types';
@@ -100,6 +101,21 @@ const App: React.FC = () => {
     updateGameState,
     setCurrentMaintext,
     setCurrentOptions,
+  });
+
+  // 使用自动总结检测 hook
+  useSummaryDetection({
+    summarySettings: displaySettings.summarySettings,
+    onSummaryComplete: (results) => {
+      gameLogger.log('[App] 自动总结完成:', results);
+      if (results.totalFailed > 0) {
+        showError(`总结完成，但有 ${results.totalFailed} 个角色处理失败`);
+      }
+    },
+    onSummaryError: (error) => {
+      gameLogger.error('[App] 自动总结失败:', error);
+      showError(`自动总结失败: ${error.message}`);
+    },
   });
 
   // 检查是否存在存档，如果存在则直接进入游戏

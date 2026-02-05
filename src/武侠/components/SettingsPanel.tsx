@@ -206,13 +206,114 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     
     // 将导入的规则添加到现有规则列表末尾
     updateSetting('regexRules', [...settings.regexRules, ...newRules]);
-    
+
     if (skippedCount > 0) {
       alert(`成功导入 ${newRules.length} 条酒馆正则规则\n跳过 ${skippedCount} 条重名规则`);
     } else {
       alert(`成功导入 ${newRules.length} 条酒馆正则规则`);
     }
   }, [settings.regexRules, updateSetting]);
+
+  // =========================================
+  // 自动总结相关回调
+  // =========================================
+
+  // 更新总结设置
+  const updateSummarySetting = useCallback(<K extends keyof SummarySettings>(
+    key: K,
+    value: SummarySettings[K]
+  ) => {
+    onSettingsChange({
+      ...settings,
+      summarySettings: {
+        ...settings.summarySettings,
+        [key]: value,
+      },
+    });
+  }, [settings, onSettingsChange]);
+
+  // 更新 API 配置
+  const updateApiConfig = useCallback(<K extends keyof SummaryApiConfig>(
+    key: K,
+    value: SummaryApiConfig[K]
+  ) => {
+    onSettingsChange({
+      ...settings,
+      summarySettings: {
+        ...settings.summarySettings,
+        apiConfig: {
+          ...settings.summarySettings.apiConfig,
+          [key]: value,
+        },
+      },
+    });
+  }, [settings, onSettingsChange]);
+
+  // 更新阈值
+  const updateThreshold = useCallback(<K extends keyof SummaryThresholds>(
+    key: K,
+    value: SummaryThresholds[K]
+  ) => {
+    onSettingsChange({
+      ...settings,
+      summarySettings: {
+        ...settings.summarySettings,
+        thresholds: {
+          ...settings.summarySettings.thresholds,
+          [key]: value,
+        },
+      },
+    });
+  }, [settings, onSettingsChange]);
+
+  // 检测总结状态
+  const handleCheckSummaryStatus = useCallback(() => {
+    const result = checkSummaryTrigger(settings.summarySettings.thresholds);
+    setSummaryStatus(result);
+    setSummaryResult(null);
+  }, [settings.summarySettings.thresholds]);
+
+  // 手动触发总结
+  const handleManualSummaryTrigger = useCallback(async () => {
+    if (getIsSummarizing()) {
+      alert('已有总结任务在执行中，请稍后再试');
+      return;
+    }
+
+    // 先检测状态
+    const checkResult = checkSummaryTrigger(settings.summarySettings.thresholds);
+    setSummaryStatus(checkResult);
+
+    if (checkResult.pendingCharacters.length === 0) {
+      alert('没有需要总结的角色');
+      return;
+    }
+
+    // 确认执行
+    const confirmMsg = `检测到 ${checkResult.pendingCharacters.length} 个角色需要总结：\n${checkResult.pendingCharacters.map(c => `• ${c.displayName} (${c.entriesCount} 条经历)`).join('\n')}\n\n是否开始总结？`;
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setIsSummaryRunning(true);
+    setSummaryResult(null);
+
+    try {
+      const result = await triggerManualSummary(settings.summarySettings);
+      setSummaryResult(result);
+
+      if (result.success) {
+        alert(`总结完成！成功处理 ${result.totalSuccess} 个角色`);
+      } else {
+        alert(`总结完成，但有 ${result.totalFailed} 个角色处理失败`);
+      }
+    } catch (error) {
+      uiLogger.error('手动总结失败:', error);
+      alert('总结过程中发生错误，请查看控制台日志');
+    } finally {
+      setIsSummaryRunning(false);
+    }
+  }, [settings.summarySettings]);
 
   return (
     <div className="settings-panel">
@@ -238,6 +339,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         >
           <Icons.Scroll size={16} />
           <span>正则替换</span>
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'summary' ? 'active' : ''}`}
+          onClick={() => setActiveTab('summary')}
+        >
+          <Icons.Scroll size={16} />
+          <span>自动总结</span>
         </button>
         <button
           className={`settings-tab ${activeTab === 'debug' ? 'active' : ''}`}
@@ -473,6 +581,250 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <Icons.Scroll size={14} />
                 <span>导入酒馆正则</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* 自动总结设置 */}
+        {activeTab === 'summary' && (
+          <div className="settings-section summary-section">
+            <h4 className="settings-section-title">
+              <span className="diamond-bullet"></span>
+              自动总结设置
+            </h4>
+            <p className="settings-description">
+              当角色的人物经历条目过多时，自动调用 AI 进行总结精炼。
+            </p>
+
+            {/* 启用开关 */}
+            <div className="settings-row">
+              <label className="settings-label">启用自动总结</label>
+              <div className="settings-control">
+                <button
+                  className={`summary-toggle-btn ${settings.summarySettings.enabled ? 'active' : ''}`}
+                  onClick={() => updateSummarySetting('enabled', !settings.summarySettings.enabled)}
+                >
+                  {settings.summarySettings.enabled ? <Icons.ToggleRight size={24} /> : <Icons.ToggleLeft size={24} />}
+                  <span>{settings.summarySettings.enabled ? '已启用' : '已禁用'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* API 配置 */}
+            <div className="summary-subsection">
+              <h5 className="summary-subsection-title">API 配置</h5>
+
+              <div className="settings-row">
+                <label className="settings-label">API 地址</label>
+                <div className="settings-control">
+                  <input
+                    type="text"
+                    value={settings.summarySettings.apiConfig.apiurl}
+                    onChange={(e) => updateApiConfig('apiurl', e.target.value)}
+                    placeholder="https://api.openai.com/v1"
+                    className="settings-text-input"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <label className="settings-label">API 密钥</label>
+                <div className="settings-control">
+                  <input
+                    type="password"
+                    value={settings.summarySettings.apiConfig.key}
+                    onChange={(e) => updateApiConfig('key', e.target.value)}
+                    placeholder="sk-..."
+                    className="settings-text-input"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <label className="settings-label">模型名称</label>
+                <div className="settings-control">
+                  <input
+                    type="text"
+                    value={settings.summarySettings.apiConfig.model}
+                    onChange={(e) => updateApiConfig('model', e.target.value)}
+                    placeholder="gpt-4"
+                    className="settings-text-input"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <label className="settings-label">API 源</label>
+                <div className="settings-control">
+                  <select
+                    value={settings.summarySettings.apiConfig.source || 'openai'}
+                    onChange={(e) => updateApiConfig('source', e.target.value)}
+                    className="settings-select"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 触发阈值 */}
+            <div className="summary-subsection">
+              <h5 className="summary-subsection-title">触发阈值</h5>
+
+              <div className="settings-row">
+                <label className="settings-label">单角色条目阈值</label>
+                <div className="settings-control">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={settings.summarySettings.thresholds.perCharacterEntriesThreshold}
+                    onChange={(e) => updateThreshold('perCharacterEntriesThreshold', parseInt(e.target.value) || 10)}
+                    className="settings-number-input"
+                  />
+                  <span className="settings-hint-inline">超过此条目数的角色加入待处理队列</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <label className="settings-label">待处理队列阈值</label>
+                <div className="settings-control">
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={settings.summarySettings.thresholds.pendingQueueThreshold}
+                    onChange={(e) => updateThreshold('pendingQueueThreshold', parseInt(e.target.value) || 5)}
+                    className="settings-number-input"
+                  />
+                  <span className="settings-hint-inline">队列中角色数达到此值时触发总结</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <label className="settings-label">总条目数阈值</label>
+                <div className="settings-control">
+                  <input
+                    type="number"
+                    min="10"
+                    max="500"
+                    value={settings.summarySettings.thresholds.totalEntriesThreshold}
+                    onChange={(e) => updateThreshold('totalEntriesThreshold', parseInt(e.target.value) || 50)}
+                    className="settings-number-input"
+                  />
+                  <span className="settings-hint-inline">所有角色总条目数达到此值时触发总结</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 提示词模板 */}
+            <div className="summary-subsection">
+              <h5 className="summary-subsection-title">提示词模板</h5>
+              <p className="settings-hint">
+                可用变量：{'{{characterName}}'} - 角色名称，{'{{biographyEntries}}'} - 经历条目
+              </p>
+              <textarea
+                value={settings.summarySettings.promptTemplate}
+                onChange={(e) => updateSummarySetting('promptTemplate', e.target.value)}
+                placeholder="请输入总结提示词模板..."
+                className="settings-textarea"
+                rows={8}
+              />
+              <button
+                className="settings-reset-template-btn"
+                onClick={() => updateSummarySetting('promptTemplate', DEFAULT_SUMMARY_SETTINGS.promptTemplate)}
+              >
+                恢复默认模板
+              </button>
+            </div>
+
+            {/* 状态检测和手动触发 */}
+            <div className="summary-subsection">
+              <h5 className="summary-subsection-title">手动操作</h5>
+
+              <div className="summary-actions">
+                <button
+                  className="settings-action-btn"
+                  onClick={handleCheckSummaryStatus}
+                  disabled={isSummaryRunning}
+                >
+                  <Icons.Debug size={16} />
+                  <span>检测状态</span>
+                </button>
+                <button
+                  className="settings-action-btn primary"
+                  onClick={handleManualSummaryTrigger}
+                  disabled={isSummaryRunning}
+                >
+                  <Icons.Scroll size={16} />
+                  <span>{isSummaryRunning ? '总结中...' : '手动触发总结'}</span>
+                </button>
+              </div>
+
+              {/* 状态显示 */}
+              {summaryStatus && (
+                <div className="summary-status">
+                  <div className="summary-status-header">
+                    <span>检测结果</span>
+                    <span className={`summary-status-badge ${summaryStatus.shouldTrigger ? 'warning' : 'ok'}`}>
+                      {summaryStatus.shouldTrigger ? '需要总结' : '正常'}
+                    </span>
+                  </div>
+                  <div className="summary-status-body">
+                    <div className="summary-status-item">
+                      <span>待处理角色数：</span>
+                      <strong>{summaryStatus.pendingCharacters.length}</strong>
+                    </div>
+                    <div className="summary-status-item">
+                      <span>总经历条目数：</span>
+                      <strong>{summaryStatus.totalEntries}</strong>
+                    </div>
+                    {summaryStatus.pendingCharacters.length > 0 && (
+                      <div className="summary-pending-list">
+                        <span>待处理角色：</span>
+                        <ul>
+                          {summaryStatus.pendingCharacters.map(c => (
+                            <li key={c.characterId}>
+                              {c.displayName} ({c.entriesCount} 条)
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 总结结果 */}
+              {summaryResult && (
+                <div className={`summary-result ${summaryResult.success ? 'success' : 'partial'}`}>
+                  <div className="summary-result-header">
+                    <span>总结结果</span>
+                    <span className={`summary-result-badge ${summaryResult.success ? 'success' : 'warning'}`}>
+                      {summaryResult.success ? '全部成功' : '部分失败'}
+                    </span>
+                  </div>
+                  <div className="summary-result-body">
+                    <div className="summary-result-item">
+                      <span>处理总数：</span>
+                      <strong>{summaryResult.totalProcessed}</strong>
+                    </div>
+                    <div className="summary-result-item success">
+                      <span>成功：</span>
+                      <strong>{summaryResult.totalSuccess}</strong>
+                    </div>
+                    {summaryResult.totalFailed > 0 && (
+                      <div className="summary-result-item failed">
+                        <span>失败：</span>
+                        <strong>{summaryResult.totalFailed}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
