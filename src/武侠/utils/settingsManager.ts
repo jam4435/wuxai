@@ -22,6 +22,52 @@ export interface RegexRule {
   description?: string;
 }
 
+/** 自定义API配置（用于自动总结） */
+export interface SummaryApiConfig {
+  /** API地址 */
+  apiurl: string;
+  /** API密钥 */
+  key: string;
+  /** 模型名称 */
+  model: string;
+  /** API源，默认为 'openai' */
+  source?: string;
+}
+
+/** 阈值设置 */
+export interface SummaryThresholds {
+  /** 待处理队列角色数阈值 (默认5) */
+  pendingQueueThreshold: number;
+  /** 总条目数阈值 (默认50) */
+  totalEntriesThreshold: number;
+  /** 单角色条目阈值 (默认10) */
+  perCharacterEntriesThreshold: number;
+}
+
+/** 待总结角色信息 */
+export interface PendingCharacterSummary {
+  /** 角色标识：'user' 或 NPC名称 */
+  characterId: string;
+  /** 显示名称 */
+  displayName: string;
+  /** 经历条目数 */
+  entriesCount: number;
+  /** 人物经历数据 */
+  biography: Record<string, string>;
+}
+
+/** 自动总结设置 */
+export interface SummarySettings {
+  /** 是否启用自动总结 */
+  enabled: boolean;
+  /** API配置 */
+  apiConfig: SummaryApiConfig;
+  /** 提示词模板 */
+  promptTemplate: string;
+  /** 触发阈值 */
+  thresholds: SummaryThresholds;
+}
+
 /** 显示设置 */
 export interface DisplaySettings {
   // 正文字体设置
@@ -37,6 +83,9 @@ export interface DisplaySettings {
 
   // 正则替换规则
   regexRules: RegexRule[];
+
+  // 自动总结设置
+  summarySettings: SummarySettings;
 }
 
 // =========================================
@@ -52,6 +101,35 @@ export const ERA_BASE_REGEX_RULE: RegexRule = {
   description: 'ERA基础正则',
 };
 
+/** 默认总结提示词模板 */
+export const DEFAULT_SUMMARY_PROMPT_TEMPLATE = `你是一个专业的文学编辑。请将以下角色的人物经历进行总结和精炼，保留关键事件和重要信息，去除冗余描述。
+
+角色名称：{{characterName}}
+当前经历条目：
+{{biographyEntries}}
+
+请输出精炼后的经历总结，格式为：
+<summary>
+[总结内容，按时间顺序，每个关键事件一行]
+</summary>`;
+
+/** 默认自动总结设置 */
+export const DEFAULT_SUMMARY_SETTINGS: SummarySettings = {
+  enabled: false,
+  apiConfig: {
+    apiurl: '',
+    key: '',
+    model: '',
+    source: 'openai',
+  },
+  promptTemplate: DEFAULT_SUMMARY_PROMPT_TEMPLATE,
+  thresholds: {
+    pendingQueueThreshold: 5,
+    totalEntriesThreshold: 50,
+    perCharacterEntriesThreshold: 10,
+  },
+};
+
 export const DEFAULT_SETTINGS: DisplaySettings = {
   fontSize: 16,
   fontColor: '#e7e5e4', // stone-200
@@ -63,6 +141,8 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   backgroundBlur: 0,
 
   regexRules: [ERA_BASE_REGEX_RULE],
+
+  summarySettings: DEFAULT_SUMMARY_SETTINGS,
 };
 
 /** 正文显示设置的默认值 */
@@ -85,6 +165,11 @@ export const DEFAULT_REGEX_SETTINGS = {
   regexRules: DEFAULT_SETTINGS.regexRules,
 } as const;
 
+/** 自动总结设置的默认值 */
+export const DEFAULT_SUMMARY_TAB_SETTINGS = {
+  summarySettings: DEFAULT_SUMMARY_SETTINGS,
+} as const;
+
 // =========================================
 // 本地存储键名
 // =========================================
@@ -104,7 +189,25 @@ export function loadSettings(): DisplaySettings {
     if (stored) {
       const parsed = JSON.parse(stored) as Partial<DisplaySettings>;
       // 合并默认设置，确保所有字段都存在
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      const merged = { ...DEFAULT_SETTINGS, ...parsed };
+      // 确保 summarySettings 完整（处理旧设置迁移）
+      if (!parsed.summarySettings) {
+        merged.summarySettings = DEFAULT_SUMMARY_SETTINGS;
+      } else {
+        merged.summarySettings = {
+          ...DEFAULT_SUMMARY_SETTINGS,
+          ...parsed.summarySettings,
+          apiConfig: {
+            ...DEFAULT_SUMMARY_SETTINGS.apiConfig,
+            ...parsed.summarySettings.apiConfig,
+          },
+          thresholds: {
+            ...DEFAULT_SUMMARY_SETTINGS.thresholds,
+            ...parsed.summarySettings.thresholds,
+          },
+        };
+      }
+      return merged;
     }
   } catch (error) {
     dataLogger.warn('加载设置失败，使用默认设置:', error);

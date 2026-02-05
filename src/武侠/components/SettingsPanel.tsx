@@ -3,13 +3,25 @@ import {
   DEFAULT_BACKGROUND_SETTINGS,
   DEFAULT_DISPLAY_SETTINGS,
   DEFAULT_REGEX_SETTINGS,
+  DEFAULT_SUMMARY_SETTINGS,
+  DEFAULT_SUMMARY_TAB_SETTINGS,
   DisplaySettings,
   RegexRule,
+  SummarySettings,
+  SummaryApiConfig,
+  SummaryThresholds,
   createRegexRule,
   imageToBase64,
   importTavernRegexes,
   validateRegex
 } from '../utils/settingsManager';
+import {
+  checkSummaryTrigger,
+  triggerManualSummary,
+  getIsSummarizing,
+  type SummaryTriggerResult,
+  type BatchSummaryResult,
+} from '../utils/summaryManager';
 import { Icons } from './Icons';
 import { DebugLogEntry } from '../hooks';
 import { uiLogger } from '../utils/logger';
@@ -31,9 +43,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   debugLogs = [],
   onClearDebugLogs,
 }) => {
-  const [activeTab, setActiveTab] = useState<'display' | 'background' | 'regex' | 'debug'>('display');
+  const [activeTab, setActiveTab] = useState<'display' | 'background' | 'regex' | 'summary' | 'debug'>('display');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  // 自动总结相关状态
+  const [summaryStatus, setSummaryStatus] = useState<SummaryTriggerResult | null>(null);
+  const [isSummaryRunning, setIsSummaryRunning] = useState(false);
+  const [summaryResult, setSummaryResult] = useState<BatchSummaryResult | null>(null);
 
   // 更新单个设置项
   const updateSetting = useCallback(<K extends keyof DisplaySettings>(
@@ -68,6 +85,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           ...DEFAULT_REGEX_SETTINGS,
         });
         break;
+      case 'summary':
+        onSettingsChange({
+          ...settings,
+          ...DEFAULT_SUMMARY_TAB_SETTINGS,
+        });
+        setSummaryStatus(null);
+        setSummaryResult(null);
+        break;
       case 'debug':
         // 清空调试日志
         onClearDebugLogs?.();
@@ -84,6 +109,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         return '重置背景设置';
       case 'regex':
         return '清空所有规则';
+      case 'summary':
+        return '重置总结设置';
       case 'debug':
         return '清空调试日志';
     }
