@@ -114,12 +114,12 @@ export function useSummaryDetection({
 
     // 注册事件监听
     dataLogger.log('[useSummaryDetection] 注册 MESSAGE_RECEIVED 事件监听');
-    eventOn('MESSAGE_RECEIVED', handleMessageReceived);
+    const listener = eventOn('MESSAGE_RECEIVED', handleMessageReceived);
 
     // 清理函数
     return () => {
       dataLogger.log('[useSummaryDetection] 移除 MESSAGE_RECEIVED 事件监听');
-      eventOff('MESSAGE_RECEIVED', handleMessageReceived);
+      listener.stop();
     };
   }, [checkAndExecuteSummary]);
 }
