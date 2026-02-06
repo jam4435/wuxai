@@ -75,17 +75,16 @@ interface UserProfile {
     风姿?: number;
     福缘?: number;
   };
-  // 玩家当前属性（7维：包含所有可成长属性）
+  // 玩家当前属性（战斗属性：随境界变化）
+  // 注意：悟性、风姿、福缘不随境界变化，只存在于初始属性中
   当前属性?: {
     臂力?: number;
     根骨?: number;
     机敏?: number;
-    悟性?: number;
-    风姿?: number;
-    福缘?: number;
     洞察?: number;
   };
   // 当前属性字段（兼容新旧格式）
+  // 注意：悟性不随境界变化，只存在于初始属性中
   属性?: {
     气血?: string | number; // 支持 "当前值/最大值" 格式或纯数字
     内力?: string | number; // 支持 "当前值/最大值" 格式或纯数字
@@ -514,15 +513,14 @@ function parseCurrentAttributes(
   const mpFromAttrs = parseResourceValue(attrs?.内力, 50);
 
   // 优先使用计算结果，如果没有则使用变量中的值或默认值
-  // 悟性从初始属性读取（不随境界变化）
-  const result = {
+  // 注意：悟性不随境界变化，只存在于初始属性中
+  const result: CurrentAttributes = {
     hp: calculatedResources?.气血上限 ?? hpFromAttrs,
     mp: calculatedResources?.内力上限 ?? mpFromAttrs,
-    brawn: calculatedCombat?.臂力 ?? attrs?.臂力 ?? 10,
-    root: calculatedCombat?.根骨 ?? attrs?.根骨 ?? 10,
-    agility: calculatedCombat?.机敏 ?? attrs?.机敏 ?? 10,
-    savvy: initialAttrs?.悟性 ?? 10, // 悟性从初始属性读取
-    insight: calculatedCombat?.洞察 ?? attrs?.洞察 ?? 10,
+    臂力: calculatedCombat?.臂力 ?? attrs?.臂力 ?? 10,
+    根骨: calculatedCombat?.根骨 ?? attrs?.根骨 ?? 10,
+    机敏: calculatedCombat?.机敏 ?? attrs?.机敏 ?? 10,
+    洞察: calculatedCombat?.洞察 ?? attrs?.洞察 ?? 10,
   };
   dataLogger.log('[variableReader] Step 5d - 当前属性解析结果:', result);
   return result;
