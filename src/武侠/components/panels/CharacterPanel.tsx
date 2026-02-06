@@ -265,11 +265,13 @@ export const CharacterPanel: React.FC<CharacterPanelProps> = ({ stats, worldTime
                 <span className="diamond-bullet" style={{ width: '6px', height: '6px', background: '#d97706', transform: 'rotate(45deg)' }}></span> 根骨天资
             </h4>
             <div className="attr-grid">
+                {/* 战斗属性（随境界变化） */}
                 <Attribute label="臂力" value={stats.attributes.臂力} initial={stats.initialAttributes.臂力} />
                 <Attribute label="根骨" value={stats.attributes.根骨} initial={stats.initialAttributes.根骨} />
                 <Attribute label="机敏" value={stats.attributes.机敏} initial={stats.initialAttributes.机敏} />
-                <Attribute label="悟性" value={stats.attributes.悟性} initial={stats.initialAttributes.悟性} />
                 <Attribute label="洞察" value={stats.attributes.洞察} initial={stats.initialAttributes.洞察} />
+                {/* 固定属性（不随境界变化） */}
+                <Attribute label="悟性" value={stats.initialAttributes.悟性} />
                 <Attribute label="风姿" value={stats.initialAttributes.风姿} />
                 <Attribute label="福缘" value={stats.initialAttributes.福缘} />
             </div>

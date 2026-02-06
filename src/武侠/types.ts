@@ -30,13 +30,13 @@ export interface InitialAttributes {
 }
 
 // "属性" (Current stats)
+// 注意：悟性不随境界变化，只存在于初始属性中
 export interface CurrentAttributes {
   hp: number; // 气血
   mp: number; // 内力
   臂力: number;
   根骨: number;
   机敏: number;
-  悟性: number;
   洞察: number;
 }
 
