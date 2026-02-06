@@ -872,10 +872,11 @@ function needsAttributeUpdate(角色Data: CharacterData): AttributeUpdateCheck {
   return { needsUpdate: false, attributeExists: true };
 }
 
-// 防止 autoUpdateCharacterAttributes 重复调用的标记
-// 由于 autoUpdateCharacterAttributes 会触发 era:writeDone 事件，
+// 防止重复调用的标记
+// 由于属性更新会触发 era:writeDone 事件，
 // 而 App.tsx 监听 era:writeDone 后会调用 readGameData()，
-// readGameData() 又会调用 autoUpdateCharacterAttributes，需要防止无限循环
+// readGameData() 又会调用属性更新函数，需要防止无限循环
+let isUpdatingPlayerAttributes = false;
 let isUpdatingCharacterAttributes = false;
 
 // ============================================
@@ -975,6 +976,166 @@ function shouldUpdateCharacterByCache(
 function updateCharacterCache(cacheKey: string, realm: string): void {
   characterStateCache.set(cacheKey, { realm, exists: true });
   dataLogger.log(`[updateCharacterCache] 已更新缓存: ${cacheKey} -> realm=${realm}`);
+}
+
+/**
+ * 自动更新玩家数据的战斗属性并写回变量表
+ *
+ * 触发条件（基于缓存检测）：
+ * 1. 新游戏（缓存中不存在玩家数据）
+ * 2. 境界变更（缓存中的境界与当前不同）
+ *
+ * 调用时机：
+ * - 在 readGameData() 中读取变量后调用
+ * - 监听 MESSAGE_RECEIVED 事件后调用
+ *
+ * 注意：此函数有防重复调用保护，避免无限循环
+ *
+ * @param user数据 变量表中的玩家数据对象
+ */
+export async function autoUpdatePlayerAttributes(user数据?: UserProfile): Promise<void> {
+  // 防止重复调用
+  if (isUpdatingPlayerAttributes) {
+    dataLogger.log('[autoUpdatePlayerAttributes] 正在更新中，跳过重复调用');
+    return;
+  }
+
+  dataLogger.log('[autoUpdatePlayerAttributes] 开始检查玩家数据...');
+
+  if (!user数据) {
+    dataLogger.log('[autoUpdatePlayerAttributes] 玩家数据为空，跳过');
+    return;
+  }
+
+  // 如果没有初始属性，无法计算战斗属性
+  if (!user数据.初始属性) {
+    dataLogger.log('[autoUpdatePlayerAttributes] 玩家没有初始属性，跳过');
+    return;
+  }
+
+  const cacheKey = getCharacterCacheKey(true); // 玩家的缓存键
+  const currentRealm = user数据.境界 || '不入流';
+
+  // 使用缓存检测是否需要更新
+  const cached = characterStateCache.get(cacheKey);
+
+  // 检查是否需要更新
+  let shouldUpdate = false;
+  let isNew = false;
+  let realmChanged = false;
+
+  if (!cached) {
+    // 新玩家数据
+    shouldUpdate = true;
+    isNew = true;
+    dataLogger.log('[autoUpdatePlayerAttributes] 新玩家数据，需要更新');
+  } else if (cached.realm !== currentRealm) {
+    // 境界变更
+    shouldUpdate = true;
+    realmChanged = true;
+    dataLogger.log(`[autoUpdatePlayerAttributes] 境界变更 ${cached.realm} -> ${currentRealm}，需要更新`);
+  } else {
+    dataLogger.log('[autoUpdatePlayerAttributes] 玩家境界无变化，跳过');
+    return;
+  }
+
+  if (!shouldUpdate) {
+    return;
+  }
+
+  dataLogger.log(`[autoUpdatePlayerAttributes] 需要更新玩家属性 (新玩家=${isNew}, 境界变更=${realmChanged})`);
+
+  // 构建初始属性对象（5维：臂力、根骨、机敏、悟性、洞察）
+  const initialAttrs: InitialAttributes = {
+    臂力: user数据.初始属性.臂力 ?? 10,
+    根骨: user数据.初始属性.根骨 ?? 10,
+    机敏: user数据.初始属性.机敏 ?? 10,
+    悟性: user数据.初始属性.悟性 ?? 10,
+    洞察: user数据.初始属性.洞察 ?? 10,
+    风姿: user数据.初始属性.风姿 ?? 10,
+    福缘: user数据.初始属性.福缘 ?? 0,
+  };
+
+  // 准备功法计算数据
+  const martialArtsForCalc: Record<string, MartialArtForCalculation> = {};
+  if (user数据.功法) {
+    for (const [name, art] of Object.entries(user数据.功法)) {
+      if (name.startsWith('$')) continue; // 跳过模板
+      martialArtsForCalc[name] = {
+        type: art.类型 || '',
+        rank: art.功法品阶 || '粗浅',
+        mastery: art.掌握程度 || '初窥门径',
+      };
+    }
+  }
+
+  dataLogger.log('[autoUpdatePlayerAttributes] 玩家初始属性:', initialAttrs);
+  dataLogger.log('[autoUpdatePlayerAttributes] 玩家境界:', currentRealm);
+  dataLogger.log('[autoUpdatePlayerAttributes] 玩家功法:', martialArtsForCalc);
+
+  // 使用 attributeCalculator 计算战斗属性和资源属性
+  const { combat, resources } = calculateAllAttributes(initialAttrs, currentRealm, martialArtsForCalc);
+
+  dataLogger.log('[autoUpdatePlayerAttributes] 计算后战斗属性:', combat);
+  dataLogger.log('[autoUpdatePlayerAttributes] 计算后资源属性:', resources);
+
+  // 构建属性数据（使用 "当前值/最大值" 格式）
+  const calculatedAttrs: CalculatedCharacterAttributes = {
+    气血: `${resources.气血上限}/${resources.气血上限}`,
+    内力: `${resources.内力上限}/${resources.内力上限}`,
+    臂力: combat.臂力,
+    根骨: combat.根骨,
+    机敏: combat.机敏,
+    洞察: combat.洞察,
+  };
+
+  // 检查属性字段是否存在
+  const attributeExists = !!user数据.属性;
+
+  // 设置防重复标记
+  isUpdatingPlayerAttributes = true;
+
+  try {
+    // 写入变量表
+    const updateData = { user数据: { 属性: calculatedAttrs } };
+
+    if (attributeExists) {
+      // 属性已存在，使用 update
+      dataLogger.log('[autoUpdatePlayerAttributes] UPDATE 数据:', JSON.stringify(updateData, null, 2));
+      eventEmit('era:updateByObject', updateData);
+      dataLogger.log('[autoUpdatePlayerAttributes] UPDATE 请求已发送');
+    } else {
+      // 属性不存在，使用 insert
+      dataLogger.log('[autoUpdatePlayerAttributes] INSERT 数据:', JSON.stringify(updateData, null, 2));
+      eventEmit('era:insertByObject', updateData);
+      dataLogger.log('[autoUpdatePlayerAttributes] INSERT 请求已发送');
+    }
+
+    // 等待写入完成
+    await new Promise<void>(resolve => {
+      const timeout = setTimeout(() => {
+        dataLogger.log('[autoUpdatePlayerAttributes] 等待超时 (500ms)，继续执行');
+        resolve();
+      }, 500);
+      eventOnce('era:writeDone', () => {
+        dataLogger.log('[autoUpdatePlayerAttributes] 收到 era:writeDone 事件');
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+
+    // 更新缓存
+    updateCharacterCache(cacheKey, currentRealm);
+
+    dataLogger.log('[autoUpdatePlayerAttributes] 玩家属性更新完成');
+  } catch (error) {
+    dataLogger.error('[autoUpdatePlayerAttributes] 玩家属性更新失败:', error);
+  } finally {
+    setTimeout(() => {
+      isUpdatingPlayerAttributes = false;
+      dataLogger.log('[autoUpdatePlayerAttributes] 防重复标记已清除');
+    }, 100);
+  }
 }
 
 /**
@@ -1567,6 +1728,11 @@ export async function readGameData(): Promise<Partial<GameState> | null> {
     if (Object.keys(variables).length === 0) {
       dataLogger.log('[variableReader] 变量表为空，返回 null');
       return null;
+    }
+
+    // 自动更新玩家数据中缺失的战斗属性
+    if (variables.user数据) {
+      await autoUpdatePlayerAttributes(variables.user数据);
     }
 
     // 自动更新角色数据中缺失的战斗属性
