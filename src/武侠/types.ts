@@ -77,6 +77,8 @@ export interface CharacterProfile {
 
   biography: Record<string, string> | string; // 人物经历 (Can be text or map)
   network: Record<string, string>; // 关系网
+
+  已探索地点?: string[]; // 已探索的地点列表（用于地图系统）
 }
 
 export interface InventoryItem {
@@ -405,3 +407,76 @@ export interface AppearanceTemplate {
  * 外貌字段现在包含了原来的身材描述
  * AppearanceTemplate 可根据风姿、臂力、根骨综合生成外貌描述
  */
+
+// ============================================
+// 地图系统类型定义
+// ============================================
+
+/**
+ * 地图坐标
+ */
+export interface MapCoordinate {
+  x: number;
+  y: number;
+}
+
+/**
+ * 小地点（第三级）
+ */
+export interface MapLocation {
+  描述: string;
+  坐标: MapCoordinate;
+  初始探索: boolean;
+  解锁条件?: string;
+}
+
+/**
+ * 中区域（第二级）
+ */
+export interface MapRegion {
+  描述: string;
+  类型: '中区域';
+  坐标: MapCoordinate;
+  地点: Record<string, MapLocation>;
+}
+
+/**
+ * 大区域（第一级）
+ */
+export interface MapArea {
+  描述: string;
+  类型: '大区域';
+  坐标: MapCoordinate;
+  子区域: Record<string, MapRegion>;
+}
+
+/**
+ * 完整地图数据结构
+ */
+export interface MapData {
+  [areaName: string]: MapArea;
+}
+
+// ============================================
+// 指令队列系统类型定义
+// ============================================
+
+/**
+ * 待发送指令类型
+ */
+export type CommandType = 'TRAVEL' | 'USE_ITEM';
+
+/**
+ * 待发送指令
+ */
+export interface PendingCommand {
+  id: string;
+  type: CommandType;
+  text: string;
+  data: {
+    location?: string;
+    itemName?: string;
+    originalCount?: number; // 用于撤销物品使用
+  };
+  timestamp: number;
+}
