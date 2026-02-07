@@ -1045,3 +1045,296 @@
 .mastery-divine {
   --mastery-color: #fbbf24;
 } // 出神入化 - 金色
+
+// =========================================
+// Map Panel - 地图面板
+// =========================================
+
+.map-container {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 1rem;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(250, 240, 220, 0.95),
+    rgba(245, 235, 215, 0.9)
+  );
+  filter: sepia(20%);
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.map-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #f5f5dc;
+  background-size: cover;
+  background-position: center;
+
+  // 泛黄纸张叠加
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(250, 240, 220, 0.3),
+      rgba(245, 235, 215, 0.2)
+    );
+    pointer-events: none;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// 地点标记点
+.location-marker,
+.area-marker,
+.region-marker {
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &.explored {
+    text {
+      fill: #44403c;
+      font-family: var(--font-serif);
+      font-size: 12px;
+    }
+  }
+
+  &.unexplored {
+    circle {
+      fill: #a8a29e;
+      opacity: 0.4;
+    }
+    pointer-events: none;
+  }
+
+  &.current {
+    animation: markerPulse 2s ease-in-out infinite;
+  }
+
+  &:hover.explored {
+    circle {
+      filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.8));
+    }
+  }
+}
+
+@keyframes markerPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(212, 175, 55, 0.9));
+  }
+}
+
+// 小地点浮窗
+.location-popover {
+  position: fixed;
+  min-width: 200px;
+  max-width: 300px;
+  background: rgba(28, 25, 23, 0.95);
+  border: 1px solid rgba(181, 137, 80, 0.4);
+  border-radius: 8px;
+  padding: 0.75rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+
+  .popover-title {
+    font-size: 0.9rem;
+    color: #d4af37;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(181, 137, 80, 0.2);
+    padding-bottom: 0.5rem;
+  }
+
+  .location-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .location-item {
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover:not(.locked) {
+      background: rgba(181, 137, 80, 0.1);
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+
+    &.current {
+      background: rgba(217, 119, 6, 0.2);
+      border-color: rgba(217, 119, 6, 0.4);
+    }
+
+    .location-name {
+      color: var(--stone-200);
+      font-size: 0.85rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .location-desc {
+      color: var(--stone-400);
+      font-size: 0.75rem;
+    }
+
+    .location-unlock-hint {
+      color: var(--stone-500);
+      font-size: 0.7rem;
+      margin-top: 0.25rem;
+      font-style: italic;
+    }
+
+    &.locked {
+      opacity: 0.5;
+      cursor: not-allowed;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+    }
+  }
+}
+
+// 地图侧边栏
+.map-sidebar {
+  background: rgba(28, 25, 23, 0.8);
+  border-right: 1px solid rgba(181, 137, 80, 0.3);
+  padding: 1rem;
+  overflow-y: auto;
+  height: 100%;
+
+  .sidebar-title {
+    font-size: 1.1rem;
+    color: #d4af37;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(181, 137, 80, 0.3);
+    text-align: center;
+  }
+
+  .sidebar-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .area-section,
+  .region-section {
+    margin-bottom: 0.5rem;
+  }
+
+  .area-header,
+  .region-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(181, 137, 80, 0.1);
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+
+    .expand-icon {
+      color: var(--stone-400);
+      font-size: 0.7rem;
+      width: 12px;
+    }
+
+    .area-name,
+    .region-name {
+      color: var(--stone-200);
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .area-desc,
+    .region-desc {
+      color: var(--stone-500);
+      font-size: 0.75rem;
+      margin-left: auto;
+    }
+  }
+
+  .region-list,
+  .location-list {
+    margin-left: 1rem;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .location-item {
+    padding: 0.4rem 0.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+
+    &:hover {
+      background: rgba(181, 137, 80, 0.08);
+      border-color: rgba(212, 175, 55, 0.2);
+    }
+
+    &.current {
+      background: rgba(217, 119, 6, 0.15);
+      border-color: rgba(217, 119, 6, 0.3);
+    }
+
+    .location-name {
+      color: var(--stone-300);
+      font-size: 0.8rem;
+    }
+
+    .location-desc {
+      color: var(--stone-500);
+      font-size: 0.7rem;
+    }
+  }
+}
+
+// 加载和错误状态
+.map-panel-loading,
+.map-panel-error,
+.map-panel-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--stone-400);
+  font-size: 1rem;
+}
+
+.map-panel-error {
+  color: var(--red-400);
+}
