@@ -1024,3 +1024,385 @@ async function upsertRule(avatarId: string, existingRule?: PersonaAutoRule): Pro
     closeModal();
   });
 }
+
+async function toggleRuleEnabled(avatarId: string, ruleId: string, enabled: boolean): Promise<void> {
+  const rules = loadPersonaRules(avatarId);
+  const index = rules.findIndex(rule => rule.id === ruleId);
+  if (index === -1) {
+    return;
+  }
+
+  recordPersonaSnapshot(avatarId, `切换规则: ${rules[index].name}`);
+  rules[index].enabled = enabled;
+  rules[index].updatedAt = Date.now();
+  savePersonaRules(avatarId, rules);
+  renderRulesSection(avatarId);
+  renderPersonaTraits(avatarId);
+  renderProfileSection(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '切换规则后自动同步');
+}
+
+async function deleteRule(avatarId: string, ruleId: string): Promise<void> {
+  const rules = loadPersonaRules(avatarId);
+  const target = rules.find(rule => rule.id === ruleId);
+  if (!target) {
+    return;
+  }
+
+  if (!confirm(`确定删除规则「${target.name}」吗？`)) {
+    return;
+  }
+
+  recordPersonaSnapshot(avatarId, `删除规则: ${target.name}`);
+  const filtered = rules.filter(rule => rule.id !== ruleId);
+  savePersonaRules(avatarId, filtered);
+  renderRulesSection(avatarId);
+  renderPersonaTraits(avatarId);
+  renderProfileSection(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '删除规则后自动同步');
+  toastr.success('规则已删除');
+}
+
+// ==================== 快照回滚 ====================
+
+function showSnapshotList(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const snapshots = loadPersonaSnapshots(avatarId);
+  const list = snapshots
+    .slice(-20)
+    .reverse()
+    .map(snapshot => `<li>${escapeHtml(formatTime(snapshot.timestamp))} - ${escapeHtml(snapshot.reason)}</li>`)
+    .join('');
+
+  const modalHtml = `
+    <div class="pool-edit-modal">
+      <div class="pool-edit-content">
+        <h3>最近快照</h3>
+        <ul class="snapshot-list">${list || '<li>暂无快照</li>'}</ul>
+        <div class="edit-actions-bar">
+          <button class="persona-btn" id="snapshot-close-btn">关闭</button>
+        </div>
+      </div>
+      <div class="pool-edit-overlay"></div>
+    </div>
+  `;
+
+  const $modal = $(modalHtml).appendTo($('body', parentDoc));
+  const closeModal = () => $modal.remove();
+  $('#snapshot-close-btn', $modal).on('click', closeModal);
+  $('.pool-edit-overlay', $modal).on('click', closeModal);
+}
+
+async function rollbackLastSnapshot(avatarId: string): Promise<void> {
+  const restored = restoreLastPersonaSnapshot(avatarId);
+  if (!restored) {
+    toastr.warning('没有可回滚的快照');
+    return;
+  }
+
+  const parentDoc = window.parent.document;
+  $('#edit-persona-base-desc', parentDoc).val(restored.baseDescription);
+  $('#edit-persona-desc', parentDoc).val(restored.baseDescription);
+  savePersonaBaseDescription(avatarId, restored.baseDescription);
+
+  renderPersonaTraits(avatarId);
+  renderProfileSection(avatarId);
+  renderRulesSection(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '回滚快照后自动同步');
+  toastr.success(`已回滚到 ${formatTime(restored.timestamp)} 的版本`);
+}
+
+// ==================== 事件绑定 ====================
+
+function bindPanelEvents(): void {
+  const parentDoc = window.parent.document;
+
+  $('#persona-close-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, hidePanel);
+  $('#persona-overlay', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, hidePanel);
+
+  $('#persona-refresh-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    await renderPersonaList();
+    toastr.success('列表已刷新');
+  });
+
+  $('#persona-lock-chat-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, handleLockToChat);
+  $('#persona-lock-char-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, handleLockToCharacter);
+  $('#persona-unlock-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, handleUnlock);
+  $('#persona-sync-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, handleSyncMessages);
+
+  $('#edit-persona-name', parentDoc).on(`input${PANEL_EVENT_NAMESPACE}`, function () {
+    $('#persona-name-input', parentDoc).val($(this).val() as string);
+  });
+
+  $('#edit-persona-desc', parentDoc).on(`input${PANEL_EVENT_NAMESPACE}`, function () {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+
+    const baseDescription = ($(this).val() as string | undefined) || '';
+    $('#edit-persona-base-desc', parentDoc).val(baseDescription);
+    savePersonaBaseDescription(avatarId, baseDescription);
+
+    if (baseDescDebounceTimer) {
+      clearTimeout(baseDescDebounceTimer);
+    }
+    baseDescDebounceTimer = setTimeout(() => {
+      void applyComposedDescriptionForAvatar(avatarId, '编辑基础描述后自动同步');
+    }, 450);
+  });
+
+  $('#persona-trait-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      toastr.warning('请先选择一个角色');
+      return;
+    }
+    await addPersonaTrait(avatarId);
+  });
+
+  $(parentDoc)
+    .off(`change${PANEL_EVENT_NAMESPACE}`, '.trait-toggle-checkbox')
+    .on(`change${PANEL_EVENT_NAMESPACE}`, '.trait-toggle-checkbox', async function () {
+      const avatarId = getEditingAvatarId();
+      const traitId = ($(this).closest('.persona-trait-item').attr('data-id') || '').trim();
+      const enabled = Boolean($(this).prop('checked'));
+      if (!avatarId || !traitId) {
+        return;
+      }
+      await togglePersonaTrait(avatarId, traitId, enabled);
+    });
+
+  $(parentDoc)
+    .off(`click${PANEL_EVENT_NAMESPACE}`, '.trait-btn.edit')
+    .on(`click${PANEL_EVENT_NAMESPACE}`, '.trait-btn.edit', async function () {
+      const avatarId = getEditingAvatarId();
+      const traitId = (($(this).attr('data-id') as string | undefined) || '').trim();
+      if (!avatarId || !traitId) {
+        return;
+      }
+      await editPersonaTrait(avatarId, traitId);
+    });
+
+  $(parentDoc)
+    .off(`click${PANEL_EVENT_NAMESPACE}`, '.trait-btn.delete')
+    .on(`click${PANEL_EVENT_NAMESPACE}`, '.trait-btn.delete', async function () {
+      const avatarId = getEditingAvatarId();
+      const traitId = (($(this).attr('data-id') as string | undefined) || '').trim();
+      if (!avatarId || !traitId) {
+        return;
+      }
+      if (confirm('确定要删除此设定吗？')) {
+        await deletePersonaTrait(avatarId, traitId);
+      }
+    });
+
+  $('#persona-profile-select', parentDoc).on(`change${PANEL_EVENT_NAMESPACE}`, async function () {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    const profileId = (($(this).val() as string | undefined) || '').trim();
+    recordPersonaSnapshot(avatarId, '切换手动激活 Profile');
+    setActiveProfileId(avatarId, profileId);
+    renderProfileSection(avatarId);
+    renderPersonaTraits(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '切换手动 Profile 后自动同步');
+  });
+
+  $('#persona-profile-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    await upsertProfile(avatarId);
+  });
+
+  $('#persona-profile-edit-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    const profileId = ($('#persona-profile-select', parentDoc).val() as string | undefined) || '';
+    if (!profileId) {
+      toastr.warning('请先选择一个 Profile');
+      return;
+    }
+    const profile = loadPersonaAdvancedConfig(avatarId).profiles.find(p => p.id === profileId);
+    if (!profile) {
+      toastr.warning('找不到选中的 Profile');
+      return;
+    }
+    await upsertProfile(avatarId, profile);
+  });
+
+  $('#persona-profile-delete-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    await deleteActiveProfile(avatarId);
+  });
+
+  $('#persona-profile-clear-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    recordPersonaSnapshot(avatarId, '清空手动激活 Profile');
+    setActiveProfileId(avatarId, '');
+    renderProfileSection(avatarId);
+    renderPersonaTraits(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '清空手动 Profile 后自动同步');
+  });
+
+  $('#persona-rule-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    await upsertRule(avatarId);
+  });
+
+  $(parentDoc)
+    .off(`change${PANEL_EVENT_NAMESPACE}`, '.rule-enable-checkbox')
+    .on(`change${PANEL_EVENT_NAMESPACE}`, '.rule-enable-checkbox', async function () {
+      const avatarId = getEditingAvatarId();
+      const ruleId = ($(this).closest('.persona-rule-item').attr('data-rule-id') || '').trim();
+      if (!avatarId || !ruleId) {
+        return;
+      }
+      const enabled = Boolean($(this).prop('checked'));
+      await toggleRuleEnabled(avatarId, ruleId, enabled);
+    });
+
+  $(parentDoc)
+    .off(`click${PANEL_EVENT_NAMESPACE}`, '.rule-btn')
+    .on(`click${PANEL_EVENT_NAMESPACE}`, '.rule-btn', async function () {
+      const avatarId = getEditingAvatarId();
+      const ruleId = ($(this).closest('.persona-rule-item').attr('data-rule-id') || '').trim();
+      const action = ($(this).attr('data-action') || '').trim();
+      if (!avatarId || !ruleId) {
+        return;
+      }
+
+      if (action === 'edit') {
+        const rule = loadPersonaRules(avatarId).find(item => item.id === ruleId);
+        if (rule) {
+          await upsertRule(avatarId, rule);
+        }
+      } else if (action === 'delete') {
+        await deleteRule(avatarId, ruleId);
+      }
+    });
+
+  $('#persona-rollback-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    await rollbackLastSnapshot(avatarId);
+  });
+
+  $('#persona-snapshot-list-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, () => {
+    const avatarId = getEditingAvatarId();
+    if (!avatarId) {
+      return;
+    }
+    showSnapshotList(avatarId);
+  });
+
+  $('#persona-compat-refresh-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, () => {
+    refreshCompatibilitySection();
+    toastr.success('兼容性检测已刷新');
+  });
+}
+
+// ==================== 初始化函数 ====================
+
+export function initPanel(): void {
+  const parentDoc = window.parent.document;
+
+  injectStyles(parentDoc);
+  const $existingButton = $(`#${PERSONA_BUTTON_ID}`, parentDoc);
+
+  if ($existingButton.length > 0 && !$existingButton.closest('#extensionsMenu').length) {
+    $existingButton.remove();
+  }
+
+  if ($(`#${PERSONA_BUTTON_ID}`, parentDoc).length === 0) {
+    const $extensionsMenu = $('#extensionsMenu', parentDoc);
+    if ($extensionsMenu.length > 0) {
+      const buttonHtml = `
+        <div id="${PERSONA_BUTTON_ID}" class="list-group-item flex-container flexGap5 interactable" title="${PERSONA_BUTTON_TOOLTIP}" tabIndex="0">
+          <i class="${PERSONA_BUTTON_ICON}"></i>
+          <span>${PERSONA_BUTTON_TEXT_IN_MENU}</span>
+        </div>
+      `;
+      $extensionsMenu.append(buttonHtml);
+      console.log('用户设定脚本: 扩展栏按钮已创建');
+    } else {
+      console.warn('用户设定脚本: 找不到扩展菜单容器 (#extensionsMenu)');
+    }
+  }
+
+  lastCompatibilityReport = runCompatibilitySelfCheck();
+  if (!lastCompatibilityReport.ok) {
+    toastr.warning('用户设定脚本兼容性自检未通过，可在面板中查看详情');
+  }
+}
+
+async function handleContextChanged(): Promise<void> {
+  const signature = buildContextSignature();
+  if (signature === lastContextSignature) {
+    return;
+  }
+  lastContextSignature = signature;
+
+  const currentPersona = getCurrentPersonaFromDOM();
+  if (!currentPersona?.avatarId) {
+    return;
+  }
+
+  await applyComposedDescriptionForAvatar(currentPersona.avatarId, '上下文变化触发自动规则');
+
+  const editingAvatarId = getEditingAvatarId();
+  if (editingAvatarId && editingAvatarId === currentPersona.avatarId) {
+    renderPersonaTraits(editingAvatarId);
+    renderProfileSection(editingAvatarId);
+    renderRulesSection(editingAvatarId);
+  }
+}
+
+function startContextWatcher(): void {
+  if (contextWatcherTimer) {
+    return;
+  }
+
+  lastContextSignature = buildContextSignature();
+  contextWatcherTimer = setInterval(() => {
+    void handleContextChanged();
+  }, 1800);
+}
+
+export function bindEventListeners(): void {
+  const parentDoc = window.parent.document;
+
+  $(parentDoc)
+    .off(`click.${PERSONA_BUTTON_ID}`)
+    .on(`click.${PERSONA_BUTTON_ID}`, `#${PERSONA_BUTTON_ID}`, event => {
+      event.preventDefault();
+      togglePanel();
+    });
+
+  startContextWatcher();
+}
+
+export function injectStylesToIframe(): void {
+  $('head').append(styles);
+}
