@@ -47,6 +47,16 @@ function ensureString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function ensureStringLike(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
+}
+
 function normalizeDescription(description: string): string {
   return description.replace(/\r\n/g, '\n').trim();
 }
@@ -599,11 +609,12 @@ export function getRuntimeContext(): PersonaRuntimeContext {
     }
 
     const ctx = maybeSillyTavern?.getContext?.() || {};
-    const ctxChatId = ensureString(ctx.chatId) || ensureString(ctx.chat_id);
-    const ctxChatFile = ensureString(ctx.chatFile);
-    const ctxCharacterId = ensureString(ctx.characterId) || ensureString(ctx.chid) || ensureString(ctx.this_chid);
-    const ctxCharacterName = ensureString(ctx.characterName) || ensureString(ctx.name2);
-    const ctxGroupId = ensureString(ctx.groupId);
+    const ctxChatId = ensureStringLike(ctx.chatId) || ensureStringLike(ctx.chat_id);
+    const ctxChatFile = ensureStringLike(ctx.chatFile);
+    const ctxCharacterId =
+      ensureStringLike(ctx.characterId) || ensureStringLike(ctx.chid) || ensureStringLike(ctx.this_chid);
+    const ctxCharacterName = ensureStringLike(ctx.characterName) || ensureStringLike(ctx.name2);
+    const ctxGroupId = ensureStringLike(ctx.groupId);
 
     chatId = chatId || ctxChatId || ctxChatFile;
     characterId = ctxCharacterId || (ctxGroupId ? `group:${ctxGroupId}` : '');
@@ -633,7 +644,7 @@ export function getRuntimeContext(): PersonaRuntimeContext {
   }
 
   if (!characterId) {
-    characterId = getFirstAttrBySelector(['#rm_print_characters_block .character_select.selected'], 'chid', parentDoc);
+    characterId = getFirstAttrBySelector(['#rm_print_characters_block .character_select.selected'], 'data-chid', parentDoc);
   }
 
   return {
