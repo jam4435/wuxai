@@ -420,6 +420,13 @@ export const styles = `
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
+  }
+
+  #${PERSONA_PANEL_ID} .inline-actions {
+    display: flex;
+    gap: 8px;
+    min-width: 240px;
   }
 
   #${PERSONA_PANEL_ID} .persona-traits-container {
@@ -447,6 +454,31 @@ export const styles = `
 
   #${PERSONA_PANEL_ID} .persona-trait-item.enabled {
     border-color: rgba(160, 200, 120, 0.5);
+  }
+
+  #${PERSONA_PANEL_ID} .persona-folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: rgba(90, 120, 170, 0.12);
+    border-radius: 8px;
+    border: 1px solid rgba(120, 160, 220, 0.35);
+  }
+
+  #${PERSONA_PANEL_ID} .folder-toggle-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    opacity: 0.9;
+  }
+
+  #${PERSONA_PANEL_ID} .nested-trait {
+    margin-left: 18px;
+    border-left: 2px solid rgba(120, 160, 220, 0.3);
   }
 
   #${PERSONA_PANEL_ID} .persona-trait-item.disabled {
@@ -751,6 +783,13 @@ export const styles = `
   }
 
   @media (max-width: 900px) {
+    #${PERSONA_PANEL_ID} .inline-actions {
+      width: 100%;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
     #${PERSONA_PANEL_ID} .profile-toolbar {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
