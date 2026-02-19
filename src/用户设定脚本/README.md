@@ -13,6 +13,10 @@
 - **同步消息** - 将所有用户消息归属到当前 Persona
 - **状态显示** - 显示当前 Persona 状态
 - **角色设定管理** - 每个角色独立的设定列表，开启后自动拼接到人设描述中
+- **规则自动启用** - 按聊天/角色上下文匹配规则，自动启用指定 trait/Profile
+- **设定预设（Profile）** - 将多个 trait 组合为预设，一键激活/取消
+- **变更保护** - 关键变更自动生成快照，支持回滚上一版与查看快照列表
+- **兼容性自检** - 启动和面板内可检查关键 DOM/API 可用性
 
 ## 📁 文件结构
 
@@ -48,17 +52,45 @@
 3. 点击「➕ 添加」按钮创建新的设定条目
 4. 编辑设定的名称和描述内容
 5. 勾选复选框启用/禁用设定
-6. 保存角色时，启用的设定会自动拼接到人设描述中
+6. 启用的设定会自动拼接到最终人设描述中（基础描述 + 自动拼装）
 
 设定拼装格式：
 
 ```text
 [原始人设描述]
 
+--- 角色设定 ---
 - [启用的设定条目1]
 - [启用的设定条目2]
 ...
 ```
+
+### 设定预设（Profile）
+
+1. 在「设定预设（Profile）」中点击「新建」
+2. 选择要纳入预设的 trait
+3. 通过下拉框切换手动激活的 Profile
+4. 规则命中的 Profile 会与手动 Profile 叠加生效
+
+### 规则自动启用
+
+1. 在「规则自动启用」中添加规则
+2. 选择匹配范围（聊天/角色）和匹配方式（includes/equals/regex）
+3. 填写匹配内容（可用 chatId/角色名等）
+4. 选择命中后自动启用的 trait 或 Profile
+5. 聊天/角色上下文变化时会自动重算并同步描述
+
+### 变更保护与回滚
+
+- 会在 trait/Profile/规则/描述等关键变更前自动记录快照
+- 可在「变更保护」中回滚上一版
+- 可查看最近快照历史（时间 + 原因）
+
+### 兼容性自检
+
+- 初始化时自动检查关键依赖（jQuery、扩展菜单、Persona 列表、triggerSlash 等）
+- 可在面板中点击「重新检测」
+- 自检失败会显示风险项，便于定位酒馆版本差异问题
 
 ## 🛠️ 技术实现
 
@@ -66,7 +98,11 @@
 - 通过 `window.parent.document` 访问酒馆主文档
 - 使用 Slash 命令 (`/persona`, `/persona-lock`, `/persona-sync`) 执行操作
 - 样式注入到父文档和 iframe
-- 角色设定存储在 localStorage 中，以 `tavern_helper_persona_traits_{avatarId}` 为键
+- 数据存储在 localStorage 中：
+  - `tavern_helper_persona_traits_{avatarId}` - trait 列表
+  - `tavern_helper_persona_advanced_{avatarId}` - Profile + 自动规则 + 当前激活 Profile
+  - `tavern_helper_persona_base_desc_{avatarId}` - 基础描述
+  - `tavern_helper_persona_snapshot_{avatarId}` - 变更保护快照
 
 ## 📝 相关 Slash 命令
 
@@ -86,6 +122,10 @@
 - `current-persona-name` - 当前 Persona 显示
 - `persona-name-input` - Persona 名称输入框
 - `persona-traits-container` - 角色设定列表容器
+- `persona-profile-select` - Profile 选择器
+- `persona-rules-container` - 自动规则列表容器
+- `persona-snapshot-info` - 变更快照状态
+- `persona-compat-details` - 兼容性自检详情
 
 ## 📄 许可证
 
