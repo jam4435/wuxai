@@ -1220,20 +1220,7 @@ function bindPanelEvents(): void {
       }
     });
 
-  $('#persona-profile-select', parentDoc).on(`change${PANEL_EVENT_NAMESPACE}`, async function () {
-    const avatarId = getEditingAvatarId();
-    if (!avatarId) {
-      return;
-    }
-    const profileId = (($(this).val() as string | undefined) || '').trim();
-    recordPersonaSnapshot(avatarId, '切换手动激活 Profile');
-    setActiveProfileId(avatarId, profileId);
-    renderPersonaTraits(avatarId);
-    renderSnapshotSection(avatarId);
-    await applyComposedDescriptionForAvatar(avatarId, '切换手动 Profile 后自动同步');
-  });
-
-  $('#persona-profile-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
+  $('#persona-folder-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
     const avatarId = getEditingAvatarId();
     if (!avatarId) {
       return;
@@ -1241,81 +1228,46 @@ function bindPanelEvents(): void {
     await upsertProfile(avatarId);
   });
 
-  $('#persona-profile-edit-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
-    const avatarId = getEditingAvatarId();
-    if (!avatarId) {
-      return;
-    }
-    const profileId = ($('#persona-profile-select', parentDoc).val() as string | undefined) || '';
-    if (!profileId) {
-      toastr.warning('请先选择一个 Profile');
-      return;
-    }
-    const profile = loadPersonaAdvancedConfig(avatarId).profiles.find(p => p.id === profileId);
-    if (!profile) {
-      toastr.warning('找不到选中的 Profile');
-      return;
-    }
-    await upsertProfile(avatarId, profile);
-  });
-
-  $('#persona-profile-delete-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
-    const avatarId = getEditingAvatarId();
-    if (!avatarId) {
-      return;
-    }
-    await deleteActiveProfile(avatarId);
-  });
-
-  $('#persona-profile-clear-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
-    const avatarId = getEditingAvatarId();
-    if (!avatarId) {
-      return;
-    }
-    recordPersonaSnapshot(avatarId, '清空手动激活 Profile');
-    setActiveProfileId(avatarId, '');
-    renderPersonaTraits(avatarId);
-    renderSnapshotSection(avatarId);
-    await applyComposedDescriptionForAvatar(avatarId, '清空手动 Profile 后自动同步');
-  });
-
-  $('#persona-rule-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
-    const avatarId = getEditingAvatarId();
-    if (!avatarId) {
-      return;
-    }
-    await upsertRule(avatarId);
-  });
-
   $(parentDoc)
-    .off(`change${PANEL_EVENT_NAMESPACE}`, '.rule-enable-checkbox')
-    .on(`change${PANEL_EVENT_NAMESPACE}`, '.rule-enable-checkbox', async function () {
+    .off(`change${PANEL_EVENT_NAMESPACE}`, '.folder-active-checkbox')
+    .on(`change${PANEL_EVENT_NAMESPACE}`, '.folder-active-checkbox', async function () {
       const avatarId = getEditingAvatarId();
-      const ruleId = ($(this).closest('.persona-rule-item').attr('data-rule-id') || '').trim();
-      if (!avatarId || !ruleId) {
+      const profileId = ($(this).closest('.persona-folder-item').attr('data-profile-id') || '').trim();
+      if (!avatarId || !profileId) {
         return;
       }
-      const enabled = Boolean($(this).prop('checked'));
-      await toggleRuleEnabled(avatarId, ruleId, enabled);
+
+      const checked = Boolean($(this).prop('checked'));
+      const config = loadPersonaAdvancedConfig(avatarId);
+      recordPersonaSnapshot(avatarId, checked ? '手动激活文件夹' : '取消手动激活文件夹');
+      if (checked) {
+        config.activeProfileId = profileId;
+      } else if (config.activeProfileId === profileId) {
+        config.activeProfileId = '';
+      }
+      savePersonaAdvancedConfig(avatarId, config);
+      renderPersonaTraits(avatarId);
+      renderSnapshotSection(avatarId);
+      await applyComposedDescriptionForAvatar(avatarId, '切换文件夹手动激活后自动同步');
     });
 
   $(parentDoc)
-    .off(`click${PANEL_EVENT_NAMESPACE}`, '.rule-btn')
-    .on(`click${PANEL_EVENT_NAMESPACE}`, '.rule-btn', async function () {
+    .off(`click${PANEL_EVENT_NAMESPACE}`, '.folder-btn')
+    .on(`click${PANEL_EVENT_NAMESPACE}`, '.folder-btn', async function () {
       const avatarId = getEditingAvatarId();
-      const ruleId = ($(this).closest('.persona-rule-item').attr('data-rule-id') || '').trim();
+      const profileId = ($(this).closest('.persona-folder-item').attr('data-profile-id') || '').trim();
       const action = ($(this).attr('data-action') || '').trim();
-      if (!avatarId || !ruleId) {
+      if (!avatarId || !profileId) {
         return;
       }
 
       if (action === 'edit') {
-        const rule = loadPersonaRules(avatarId).find(item => item.id === ruleId);
-        if (rule) {
-          await upsertRule(avatarId, rule);
+        const profile = loadPersonaAdvancedConfig(avatarId).profiles.find(item => item.id === profileId);
+        if (profile) {
+          await upsertProfile(avatarId, profile);
         }
       } else if (action === 'delete') {
-        await deleteRule(avatarId, ruleId);
+        await deleteActiveProfile(avatarId, profileId);
       }
     });
 
