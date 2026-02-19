@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 用户设定脚本 - UI 创建和面板控制
  */
 
@@ -407,8 +407,6 @@ async function selectPersonaForEdit(avatarId: string): Promise<void> {
   $('#persona-name-input', parentDoc).val(persona.name);
 
   renderPersonaTraits(avatarId);
-  renderProfileSection(avatarId);
-  renderRulesSection(avatarId);
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '切换角色编辑时同步描述');
 }
@@ -421,68 +419,44 @@ function renderPersonaTraits(avatarId: string): void {
   }
 
   const traits = loadPersonaTraits(avatarId);
+  const config = loadPersonaAdvancedConfig(avatarId);
   const activation = getPersonaActivationState(avatarId);
   const effectiveTraitIds = new Set(activation.effectiveTraitIds);
+  const activeProfileIds = new Set(activation.activeProfileIds);
+  const traitNameMap = new Map(traits.map(t => [t.id, t.name]));
 
   container.empty();
-  if (traits.length === 0) {
-    container.html('<div class="empty-list">暂无设定条目</div>');
-  } else {
-    traits.forEach(trait => container.append(createPersonaTraitHtml(trait, effectiveTraitIds)));
+  if (traits.length === 0 && config.profiles.length === 0) {
+    container.html('<div class="empty-list">暂无条目或文件夹</div>');
+    updateAutoStatusText(avatarId);
+    return;
+  }
+
+  for (const profile of config.profiles) {
+    const folderRule = findFolderRule(config, profile.id);
+    const isManual = config.activeProfileId === profile.id;
+    const isAuto = activeProfileIds.has(profile.id) && !isManual;
+    container.append(createProfileFolderHtml(profile, folderRule, isManual, isAuto));
+
+    const groupedTraits = profile.traitIds
+      .map(id => traits.find(trait => trait.id === id))
+      .filter((trait): trait is PersonaTrait => Boolean(trait));
+    for (const trait of groupedTraits) {
+      const itemHtml = createPersonaTraitHtml(trait, effectiveTraitIds).replace(
+        'class="persona-trait-item',
+        'class="persona-trait-item nested-trait',
+      );
+      container.append(itemHtml);
+    }
+  }
+
+  const groupedTraitIdSet = new Set(config.profiles.flatMap(profile => profile.traitIds));
+  const ungroupedTraits = traits.filter(trait => !groupedTraitIdSet.has(trait.id));
+  for (const trait of ungroupedTraits) {
+    container.append(createPersonaTraitHtml(trait, effectiveTraitIds));
   }
 
   updateAutoStatusText(avatarId);
-}
-
-function renderProfileSection(avatarId: string): void {
-  const parentDoc = window.parent.document;
-  const $select = $('#persona-profile-select', parentDoc);
-  const $summary = $('#persona-profile-summary', parentDoc);
-
-  const config = loadPersonaAdvancedConfig(avatarId);
-  const traits = loadPersonaTraits(avatarId);
-  const traitNameMap = new Map(traits.map(t => [t.id, t.name]));
-  const activation = getPersonaActivationState(avatarId);
-
-  $select.empty();
-  $select.append('<option value="">(不激活手动 Profile)</option>');
-  for (const profile of config.profiles) {
-    const selected = config.activeProfileId === profile.id ? 'selected' : '';
-    $select.append(`<option value="${escapeHtml(profile.id)}" ${selected}>${escapeHtml(profile.name)}</option>`);
-  }
-
-  if (config.profiles.length === 0) {
-    $summary.text('暂无预设');
-    return;
-  }
-
-  const manualProfile = config.profiles.find(p => p.id === config.activeProfileId);
-  const activeProfiles = config.profiles.filter(p => activation.activeProfileIds.includes(p.id));
-  const activeNames = activeProfiles.map(p => p.name).join('、') || '无';
-  const manualName = manualProfile ? manualProfile.name : '无';
-
-  const firstProfile = manualProfile || config.profiles[0];
-  const traitPreview =
-    firstProfile?.traitIds.map(id => traitNameMap.get(id) || id).slice(0, 6).join('、') ||
-    '该预设没有绑定 trait';
-
-  $summary.html(
-    `手动激活: <b>${escapeHtml(manualName)}</b> | 当前生效: <b>${escapeHtml(activeNames)}</b><br>示例条目: ${escapeHtml(traitPreview)}`,
-  );
-}
-
-function renderRulesSection(avatarId: string): void {
-  const parentDoc = window.parent.document;
-  const container = $('#persona-rules-container', parentDoc);
-  const rules = loadPersonaRules(avatarId);
-
-  container.empty();
-  if (rules.length === 0) {
-    container.html('<div class="empty-list">暂无自动规则</div>');
-    return;
-  }
-
-  rules.forEach(rule => container.append(createRuleHtml(rule)));
 }
 
 function renderSnapshotSection(avatarId: string): void {
@@ -711,8 +685,6 @@ async function deletePersonaTrait(avatarId: string, traitId: string): Promise<vo
     savePersonaAdvancedConfig(avatarId, config);
 
     renderPersonaTraits(avatarId);
-    renderProfileSection(avatarId);
-    renderRulesSection(avatarId);
     await applyComposedDescriptionForAvatar(avatarId, '删除 trait 后自动同步');
     renderSnapshotSection(avatarId);
     toastr.success('设定已删除');
@@ -810,8 +782,6 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
     }
 
     savePersonaAdvancedConfig(avatarId, config);
-    renderProfileSection(avatarId);
-    renderRulesSection(avatarId);
     renderSnapshotSection(avatarId);
     await applyComposedDescriptionForAvatar(avatarId, '更新 profile 后自动同步');
     toastr.success('Profile 已保存');
@@ -849,8 +819,6 @@ async function deleteActiveProfile(avatarId: string): Promise<void> {
     config.activeProfileId = '';
   }
   savePersonaAdvancedConfig(avatarId, config);
-  renderProfileSection(avatarId);
-  renderRulesSection(avatarId);
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '删除 profile 后自动同步');
   toastr.success('Profile 已删除');
@@ -1008,8 +976,6 @@ async function upsertRule(avatarId: string, existingRule?: PersonaAutoRule): Pro
     }
 
     savePersonaAdvancedConfig(avatarId, config);
-    renderRulesSection(avatarId);
-    renderProfileSection(avatarId);
     renderPersonaTraits(avatarId);
     renderSnapshotSection(avatarId);
     await applyComposedDescriptionForAvatar(avatarId, '更新自动规则后自动同步');
@@ -1029,9 +995,7 @@ async function toggleRuleEnabled(avatarId: string, ruleId: string, enabled: bool
   rules[index].enabled = enabled;
   rules[index].updatedAt = Date.now();
   savePersonaRules(avatarId, rules);
-  renderRulesSection(avatarId);
   renderPersonaTraits(avatarId);
-  renderProfileSection(avatarId);
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '切换规则后自动同步');
 }
@@ -1050,9 +1014,7 @@ async function deleteRule(avatarId: string, ruleId: string): Promise<void> {
   recordPersonaSnapshot(avatarId, `删除规则: ${target.name}`);
   const filtered = rules.filter(rule => rule.id !== ruleId);
   savePersonaRules(avatarId, filtered);
-  renderRulesSection(avatarId);
   renderPersonaTraits(avatarId);
-  renderProfileSection(avatarId);
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '删除规则后自动同步');
   toastr.success('规则已删除');
@@ -1101,8 +1063,6 @@ async function rollbackLastSnapshot(avatarId: string): Promise<void> {
   savePersonaBaseDescription(avatarId, restored.baseDescription);
 
   renderPersonaTraits(avatarId);
-  renderProfileSection(avatarId);
-  renderRulesSection(avatarId);
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '回滚快照后自动同步');
   toastr.success(`已回滚到 ${formatTime(restored.timestamp)} 的版本`);
@@ -1201,7 +1161,6 @@ function bindPanelEvents(): void {
     const profileId = (($(this).val() as string | undefined) || '').trim();
     recordPersonaSnapshot(avatarId, '切换手动激活 Profile');
     setActiveProfileId(avatarId, profileId);
-    renderProfileSection(avatarId);
     renderPersonaTraits(avatarId);
     renderSnapshotSection(avatarId);
     await applyComposedDescriptionForAvatar(avatarId, '切换手动 Profile 后自动同步');
@@ -1248,7 +1207,6 @@ function bindPanelEvents(): void {
     }
     recordPersonaSnapshot(avatarId, '清空手动激活 Profile');
     setActiveProfileId(avatarId, '');
-    renderProfileSection(avatarId);
     renderPersonaTraits(avatarId);
     renderSnapshotSection(avatarId);
     await applyComposedDescriptionForAvatar(avatarId, '清空手动 Profile 后自动同步');
@@ -1367,8 +1325,6 @@ async function handleContextChanged(): Promise<void> {
   const editingAvatarId = getEditingAvatarId();
   if (editingAvatarId && editingAvatarId === currentPersona.avatarId) {
     renderPersonaTraits(editingAvatarId);
-    renderProfileSection(editingAvatarId);
-    renderRulesSection(editingAvatarId);
   }
 }
 
