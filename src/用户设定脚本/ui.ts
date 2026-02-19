@@ -146,36 +146,13 @@ function createPanelHtml(): string {
 
             <div class="persona-traits-section">
               <div class="panel-title">
-                <span>📋 角色设定列表</span>
-                <button class="persona-btn small" id="persona-trait-add-btn" title="添加新设定">➕ 添加</button>
+                <span>📂 条目与文件夹</span>
+                <div class="inline-actions">
+                  <button class="persona-btn small" id="persona-folder-add-btn" title="添加条目文件夹">📁 添加文件夹</button>
+                  <button class="persona-btn small" id="persona-trait-add-btn" title="添加新设定">➕ 添加条目</button>
+                </div>
               </div>
               <div id="persona-traits-container" class="persona-traits-container"></div>
-            </div>
-
-            <hr class="persona-divider">
-
-            <div class="persona-profiles-section">
-              <div class="panel-title">
-                <span>🧩 设定预设（Profile）</span>
-              </div>
-              <div class="profile-toolbar">
-                <select id="persona-profile-select" class="persona-input profile-select"></select>
-                <button class="persona-btn small" id="persona-profile-add-btn">➕ 新建</button>
-                <button class="persona-btn small" id="persona-profile-edit-btn">✏️ 编辑</button>
-                <button class="persona-btn small" id="persona-profile-delete-btn">🗑️ 删除</button>
-                <button class="persona-btn small" id="persona-profile-clear-btn">🚫 清空激活</button>
-              </div>
-              <div id="persona-profile-summary" class="text-note">暂无预设</div>
-            </div>
-
-            <hr class="persona-divider">
-
-            <div class="persona-rules-section">
-              <div class="panel-title">
-                <span>⚙️ 规则自动启用</span>
-                <button class="persona-btn small" id="persona-rule-add-btn">➕ 添加规则</button>
-              </div>
-              <div id="persona-rules-container" class="persona-rules-container"></div>
             </div>
 
             <hr class="persona-divider">

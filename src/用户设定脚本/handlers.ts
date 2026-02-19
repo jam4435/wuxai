@@ -471,6 +471,7 @@ function normalizeRules(rules: PersonaAutoRule[]): PersonaAutoRule[] {
     pattern: ensureString(rule.pattern),
     traitIds: safeArray<string>(rule.traitIds).filter(Boolean),
     profileIds: safeArray<string>(rule.profileIds).filter(Boolean),
+    profileId: ensureString(rule.profileId) || undefined,
     createdAt: typeof rule.createdAt === 'number' ? rule.createdAt : Date.now(),
     updatedAt: typeof rule.updatedAt === 'number' ? rule.updatedAt : Date.now(),
   }));
