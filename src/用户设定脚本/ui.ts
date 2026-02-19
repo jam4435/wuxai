@@ -243,34 +243,50 @@ function createPersonaTraitHtml(trait: PersonaTrait, effectiveTraitIds: Set<stri
   `;
 }
 
-function createRuleHtml(rule: PersonaAutoRule): string {
-  const safeName = escapeHtml(rule.name);
-  const safePattern = escapeHtml(rule.pattern || '(空)');
-  const tags = [
-    `<span class="rule-tag">${rule.scope === 'chat' ? '聊天' : '角色'}</span>`,
-    `<span class="rule-tag">${rule.matchMode}</span>`,
-    rule.traitIds.length > 0 ? `<span class="rule-tag">trait:${rule.traitIds.length}</span>` : '',
-    rule.profileIds.length > 0 ? `<span class="rule-tag">profile:${rule.profileIds.length}</span>` : '',
-  ]
-    .filter(Boolean)
-    .join('');
+function findFolderRule(config: ReturnType<typeof loadPersonaAdvancedConfig>, profileId: string): PersonaAutoRule | null {
+  return (
+    config.rules.find(rule => rule.profileId === profileId) ||
+    config.rules.find(
+      rule => rule.profileIds.length === 1 && rule.profileIds[0] === profileId && rule.traitIds.length === 0,
+    ) ||
+    null
+  );
+}
+
+function createProfileFolderHtml(
+  profile: PersonaProfile,
+  folderRule: PersonaAutoRule | null,
+  isManualActive: boolean,
+  isAutoActive: boolean,
+): string {
+  const safeName = escapeHtml(profile.name);
+  const modeTag = isManualActive
+    ? '<span class="state-tag manual">手动激活</span>'
+    : isAutoActive
+      ? '<span class="state-tag auto">规则激活</span>'
+      : '<span class="state-tag off">未激活</span>';
+  const ruleText = folderRule?.enabled
+    ? `自动规则: ${folderRule.scope}/${folderRule.matchMode} "${escapeHtml(folderRule.pattern)}"`
+    : '自动规则: 未启用';
 
   return `
-    <div class="persona-rule-item" data-rule-id="${escapeHtml(rule.id)}">
-      <div class="rule-main">
-        <div class="rule-title-row">
-          <span class="rule-name">${safeName}</span>
-          <label class="rule-enable">
-            <input type="checkbox" class="rule-enable-checkbox" ${rule.enabled ? 'checked' : ''}>
-            启用
-          </label>
+    <div class="persona-folder-item" data-profile-id="${escapeHtml(profile.id)}">
+      <div class="trait-item-main">
+        <div class="trait-item-header">
+          <div class="trait-item-name">📁 ${safeName}</div>
+          <div class="trait-item-state">
+            ${modeTag}
+            <label class="folder-toggle-wrap">
+              <input type="checkbox" class="folder-active-checkbox" ${isManualActive ? 'checked' : ''}>
+              手动
+            </label>
+          </div>
         </div>
-        <div class="rule-pattern">${safePattern}</div>
-        <div class="rule-tags">${tags}</div>
+        <div class="trait-item-desc">${ruleText} | 条目数: ${profile.traitIds.length}</div>
       </div>
-      <div class="rule-actions">
-        <button class="trait-btn edit rule-btn" data-action="edit">✏️</button>
-        <button class="trait-btn delete rule-btn" data-action="delete">🗑️</button>
+      <div class="trait-item-actions">
+        <button class="trait-btn edit folder-btn" data-action="edit">✏️</button>
+        <button class="trait-btn delete folder-btn" data-action="delete">🗑️</button>
       </div>
     </div>
   `;
