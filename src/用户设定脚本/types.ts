@@ -79,6 +79,8 @@ export interface PersonaAutoRule {
   traitIds: string[];
   /** 命中后启用的 profile */
   profileIds: string[];
+  /** 关联的条目文件夹（profile）ID，用于文件夹内联编辑 */
+  profileId?: string;
   /** 创建时间 */
   createdAt: number;
   /** 更新时间 */
