@@ -207,11 +207,24 @@ function createPersonaItemHtml(persona: PersonaInfo): string {
   `;
 }
 
-function createPersonaTraitHtml(trait: PersonaTrait, effectiveTraitIds: Set<string>): string {
+function createPersonaTraitHtml(
+  trait: PersonaTrait,
+  effectiveTraitIds: Set<string>,
+  options?: {
+    extraClass?: string;
+    isRuleMatched?: boolean;
+    isBoundToCurrentChat?: boolean;
+    isBoundToCurrentCharacter?: boolean;
+  },
+): string {
   const isManualEnabled = trait.enabled;
   const isEffectiveEnabled = effectiveTraitIds.has(trait.id);
   const isAutoEnabled = isEffectiveEnabled && !isManualEnabled;
   const enabledClass = isEffectiveEnabled ? 'enabled' : 'disabled';
+  const autoBoundClass = options?.isRuleMatched ? ' auto-bound' : '';
+  const extraClass = options?.extraClass ? ` ${options.extraClass}` : '';
+  const chatBindClass = options?.isBoundToCurrentChat ? 'active' : '';
+  const characterBindClass = options?.isBoundToCurrentCharacter ? 'active' : '';
   const stateTag = isAutoEnabled
     ? '<span class="state-tag auto">自动</span>'
     : isManualEnabled
@@ -221,7 +234,7 @@ function createPersonaTraitHtml(trait: PersonaTrait, effectiveTraitIds: Set<stri
   const safeDesc = escapeHtml(trait.description || '').slice(0, 80) || '无描述';
 
   return `
-    <div class="persona-trait-item ${enabledClass}" data-id="${escapeHtml(trait.id)}">
+    <div class="persona-trait-item ${enabledClass}${autoBoundClass}${extraClass}" data-id="${escapeHtml(trait.id)}">
       <div class="trait-item-main">
         <div class="trait-item-header">
           <div class="trait-item-name">${safeName}</div>
@@ -233,6 +246,8 @@ function createPersonaTraitHtml(trait: PersonaTrait, effectiveTraitIds: Set<stri
         <div class="trait-item-desc">${safeDesc}</div>
       </div>
       <div class="trait-item-actions">
+        <button class="trait-btn trait-bind-btn folder-bind-btn ${chatBindClass}" data-action="bind-chat" title="绑定当前聊天（再次点击取消）">绑聊</button>
+        <button class="trait-btn trait-bind-btn folder-bind-btn ${characterBindClass}" data-action="bind-character" title="绑定当前角色（再次点击取消）">绑角</button>
         <button class="trait-btn edit" data-id="${escapeHtml(trait.id)}" title="编辑">✏️</button>
         <button class="trait-btn delete" data-id="${escapeHtml(trait.id)}" title="删除">🗑️</button>
       </div>
@@ -247,6 +262,14 @@ function findFolderRule(config: ReturnType<typeof loadPersonaAdvancedConfig>, pr
       rule => rule.profileIds.length === 1 && rule.profileIds[0] === profileId && rule.traitIds.length === 0,
     ) ||
     null
+  );
+}
+
+function findTraitRule(config: ReturnType<typeof loadPersonaAdvancedConfig>, traitId: string): PersonaAutoRule | null {
+  return (
+    config.rules.find(
+      rule => rule.traitIds.length === 1 && rule.traitIds[0] === traitId && rule.profileIds.length === 0,
+    ) || null
   );
 }
 
@@ -266,6 +289,18 @@ function isFolderRuleBoundToCurrentContext(
     return false;
   }
   return folderRule.pattern.trim().toLowerCase() === pattern.toLowerCase();
+}
+
+function isTraitRuleBoundToCurrentContext(
+  traitRule: PersonaAutoRule | null,
+  scope: 'chat' | 'character',
+  context = getRuntimeContext(),
+): boolean {
+  const pattern = buildContextBindingPattern(scope, context);
+  if (!traitRule?.enabled || traitRule.scope !== scope || traitRule.matchMode !== 'equals' || !pattern) {
+    return false;
+  }
+  return traitRule.pattern.trim().toLowerCase() === pattern.toLowerCase();
 }
 
 function createProfileFolderHtml(
