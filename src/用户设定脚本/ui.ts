@@ -492,3 +492,236 @@ function renderRulesSection(avatarId: string): void {
   rules.forEach(rule => container.append(createRuleHtml(rule)));
 }
 
+function renderSnapshotSection(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const snapshots = loadPersonaSnapshots(avatarId);
+  const $info = $('#persona-snapshot-info', parentDoc);
+
+  if (snapshots.length === 0) {
+    $info.text('快照: 0');
+    return;
+  }
+
+  const latest = snapshots[snapshots.length - 1];
+  $info.text(`快照: ${snapshots.length} | 最近: ${formatTime(latest.timestamp)} (${latest.reason})`);
+}
+
+function renderCompatibilitySection(report: CompatibilityCheckReport): void {
+  const parentDoc = window.parent.document;
+  const $summary = $('#persona-compat-summary', parentDoc);
+  const $details = $('#persona-compat-details', parentDoc);
+  const $miniStatus = $('#persona-compat-mini-status', parentDoc);
+
+  const statusText = report.ok ? '通过' : '存在兼容性风险';
+  $summary.text(`状态: ${statusText} | 检测时间: ${formatTime(report.checkedAt)}`);
+  $miniStatus
+    .text(`自检: ${statusText}`)
+    .toggleClass('ok', report.ok)
+    .toggleClass('warn', !report.ok);
+
+  $details.empty();
+  report.items.forEach(item => {
+    const icon = item.ok ? '✅' : item.required ? '❌' : '⚠️';
+    const level = item.ok ? 'ok' : item.required ? 'danger' : 'warn';
+    $details.append(`<div class="compat-item ${level}">${icon} ${escapeHtml(item.message)}</div>`);
+  });
+}
+
+function refreshCompatibilitySection(): void {
+  const report = runCompatibilitySelfCheck();
+  lastCompatibilityReport = report;
+  renderCompatibilitySection(report);
+  if (!report.ok) {
+    toastr.warning('检测到兼容性风险，部分功能可能不可用');
+  }
+}
+
+async function applyComposedDescriptionForAvatar(avatarId: string, reason: string): Promise<void> {
+  if (!avatarId) {
+    return;
+  }
+  const parentDoc = window.parent.document;
+  const currentEditingAvatarId = getEditingAvatarId();
+
+  let baseDescription = '';
+  if (currentEditingAvatarId === avatarId) {
+    baseDescription = ($('#edit-persona-base-desc', parentDoc).val() as string | undefined) || '';
+  } else {
+    const persona = findPersonaByAvatarId(avatarId);
+    baseDescription = loadPersonaBaseDescription(avatarId, persona?.description || '');
+  }
+
+  savePersonaBaseDescription(avatarId, baseDescription);
+  const composed = await composePersonaDescription(avatarId, baseDescription);
+  await syncDescriptionToTavern(avatarId, composed, reason);
+  updateAutoStatusText(avatarId);
+}
+
+function updateAutoStatusText(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const $status = $('#persona-auto-status', parentDoc);
+  if (!$status.length || !avatarId) {
+    return;
+  }
+  const activation = getPersonaActivationState(avatarId);
+  const totalTraits = loadPersonaTraits(avatarId).length;
+  $status.text(
+    `自动拼装状态: 生效 trait ${activation.effectiveTraitIds.length}/${totalTraits}，生效 profile ${activation.activeProfileIds.length}，命中规则 ${activation.matchedRuleIds.length}`,
+  );
+}
+
+async function syncDescriptionToTavern(avatarId: string, description: string, reason: string): Promise<void> {
+  const parentDoc = window.parent.document;
+  const $personaDescription = $('#persona_description', parentDoc);
+  if ($personaDescription.length === 0) {
+    return;
+  }
+
+  const nextValue = description.replace(/\r\n/g, '\n').trim();
+  const currentValue = (($personaDescription.val() as string | undefined) || '').replace(/\r\n/g, '\n').trim();
+
+  if (nextValue === currentValue) {
+    return;
+  }
+
+  const baseDescription = ($('#edit-persona-base-desc', parentDoc).val() as string | undefined) || '';
+  recordPersonaSnapshot(avatarId, reason, baseDescription);
+  $personaDescription.val(nextValue).trigger('input').trigger('blur');
+}
+
+// ==================== 角色设定管理 ====================
+
+async function addPersonaTrait(avatarId: string): Promise<void> {
+  const traits = loadPersonaTraits(avatarId);
+  const now = Date.now();
+
+  const newTrait: PersonaTrait = {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+    name: '新设定',
+    description: '',
+    enabled: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  recordPersonaSnapshot(avatarId, '新增 trait');
+  traits.push(newTrait);
+  if (savePersonaTraits(avatarId, traits)) {
+    renderPersonaTraits(avatarId);
+    await editPersonaTrait(avatarId, newTrait.id);
+    await applyComposedDescriptionForAvatar(avatarId, '新增 trait 后自动同步');
+    renderSnapshotSection(avatarId);
+    toastr.success('设定已添加');
+  }
+}
+
+async function togglePersonaTrait(avatarId: string, traitId: string, enabled: boolean): Promise<void> {
+  const traits = loadPersonaTraits(avatarId);
+  const index = traits.findIndex(t => t.id === traitId);
+  if (index === -1) {
+    return;
+  }
+
+  recordPersonaSnapshot(avatarId, `切换 trait: ${traits[index].name}`);
+  traits[index].enabled = enabled;
+  traits[index].updatedAt = Date.now();
+
+  if (savePersonaTraits(avatarId, traits)) {
+    renderPersonaTraits(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '切换 trait 后自动同步');
+    renderSnapshotSection(avatarId);
+  }
+}
+
+async function editPersonaTrait(avatarId: string, traitId: string): Promise<void> {
+  const traits = loadPersonaTraits(avatarId);
+  const trait = traits.find(t => t.id === traitId);
+  if (!trait) {
+    toastr.error('找不到指定的设定');
+    return;
+  }
+
+  const modalHtml = `
+    <div class="pool-edit-modal">
+      <div class="pool-edit-content">
+        <h3>编辑设定</h3>
+        <div class="form-group">
+          <label>名称</label>
+          <input type="text" class="persona-input" id="trait-edit-name" value="${escapeHtml(trait.name)}">
+        </div>
+        <div class="form-group">
+          <label>描述（将拼接到人设描述中）</label>
+          <textarea class="persona-textarea" id="trait-edit-desc" rows="10">${escapeHtml(trait.description)}</textarea>
+        </div>
+        <div class="edit-actions-bar">
+          <button class="persona-btn" id="trait-edit-save">💾 保存</button>
+          <button class="persona-btn" id="trait-edit-close">✖ 关闭</button>
+        </div>
+      </div>
+      <div class="pool-edit-overlay"></div>
+    </div>
+  `;
+
+  const parentDoc = window.parent.document;
+  const $modal = $(modalHtml).appendTo($('body', parentDoc));
+
+  const closeModal = () => {
+    $modal.remove();
+  };
+
+  $('#trait-edit-close', $modal).on('click', closeModal);
+  $('.pool-edit-overlay', $modal).on('click', closeModal);
+
+  $('#trait-edit-save', $modal).on('click', async () => {
+    const newName = ($('#trait-edit-name', $modal).val() as string | undefined)?.trim() || trait.name;
+    const newDesc = ($('#trait-edit-desc', $modal).val() as string | undefined) || '';
+    const index = traits.findIndex(t => t.id === traitId);
+    if (index === -1) {
+      closeModal();
+      return;
+    }
+
+    recordPersonaSnapshot(avatarId, `编辑 trait: ${traits[index].name}`);
+    traits[index].name = newName;
+    traits[index].description = newDesc;
+    traits[index].updatedAt = Date.now();
+    savePersonaTraits(avatarId, traits);
+    renderPersonaTraits(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '编辑 trait 后自动同步');
+    renderSnapshotSection(avatarId);
+    toastr.success('设定已保存');
+    closeModal();
+  });
+}
+
+async function deletePersonaTrait(avatarId: string, traitId: string): Promise<void> {
+  const traits = loadPersonaTraits(avatarId);
+  const target = traits.find(t => t.id === traitId);
+  if (!target) {
+    return;
+  }
+
+  recordPersonaSnapshot(avatarId, `删除 trait: ${target.name}`);
+  const filtered = traits.filter(t => t.id !== traitId);
+  if (savePersonaTraits(avatarId, filtered)) {
+    const config = loadPersonaAdvancedConfig(avatarId);
+    config.profiles = config.profiles.map(profile => ({
+      ...profile,
+      traitIds: profile.traitIds.filter(id => id !== traitId),
+      updatedAt: Date.now(),
+    }));
+    config.rules = config.rules.map(rule => ({
+      ...rule,
+      traitIds: rule.traitIds.filter(id => id !== traitId),
+      updatedAt: Date.now(),
+    }));
+    savePersonaAdvancedConfig(avatarId, config);
+
+    renderPersonaTraits(avatarId);
+    renderProfileSection(avatarId);
+    renderRulesSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '删除 trait 后自动同步');
+    renderSnapshotSection(avatarId);
+    toastr.success('设定已删除');
+  }
+}
