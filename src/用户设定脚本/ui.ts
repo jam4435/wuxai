@@ -16,7 +16,6 @@ import {
   handleUnlock,
   loadPersonaAdvancedConfig,
   loadPersonaBaseDescription,
-  loadPersonaRules,
   loadPersonaSnapshots,
   loadPersonaTraits,
   recordPersonaSnapshot,
@@ -24,10 +23,8 @@ import {
   runCompatibilitySelfCheck,
   savePersonaAdvancedConfig,
   savePersonaBaseDescription,
-  savePersonaRules,
   savePersonaTraits,
   selectPersonaInParentUI,
-  setActiveProfileId,
   updateCurrentPersonaDisplay,
   composePersonaDescription,
 } from './handlers';
