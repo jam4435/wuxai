@@ -696,13 +696,15 @@ async function deletePersonaTrait(avatarId: string, traitId: string): Promise<vo
 async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile): Promise<void> {
   const parentDoc = window.parent.document;
   const traits = loadPersonaTraits(avatarId);
+  const baseConfig = loadPersonaAdvancedConfig(avatarId);
+  const existingRule = existingProfile ? findFolderRule(baseConfig, existingProfile.id) : null;
 
   if (traits.length === 0) {
-    toastr.warning('请先创建至少一个 trait 再设置 Profile');
+    toastr.warning('请先创建至少一个条目，再创建文件夹');
     return;
   }
 
-  const title = existingProfile ? '编辑 Profile' : '新建 Profile';
+  const title = existingProfile ? '编辑条目文件夹' : '新建条目文件夹';
   const selectedIds = new Set(existingProfile?.traitIds || []);
   const traitCheckboxes = traits
     .map(
@@ -720,12 +722,36 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
       <div class="pool-edit-content">
         <h3>${title}</h3>
         <div class="form-group">
-          <label>名称</label>
+          <label>文件夹名称</label>
           <input type="text" class="persona-input" id="profile-edit-name" value="${escapeHtml(existingProfile?.name || '')}">
         </div>
         <div class="form-group">
-          <label>包含的 trait</label>
+          <label>包含条目</label>
           <div class="checkbox-list">${traitCheckboxes}</div>
+        </div>
+        <div class="form-group two-col-grid">
+          <div>
+            <label>自动规则范围</label>
+            <select id="folder-rule-scope" class="persona-input">
+              <option value="chat" ${existingRule?.scope === 'chat' || !existingRule ? 'selected' : ''}>聊天</option>
+              <option value="character" ${existingRule?.scope === 'character' ? 'selected' : ''}>角色</option>
+            </select>
+          </div>
+          <div>
+            <label>自动规则匹配</label>
+            <select id="folder-rule-mode" class="persona-input">
+              <option value="includes" ${existingRule?.matchMode === 'includes' || !existingRule ? 'selected' : ''}>includes</option>
+              <option value="equals" ${existingRule?.matchMode === 'equals' ? 'selected' : ''}>equals</option>
+              <option value="regex" ${existingRule?.matchMode === 'regex' ? 'selected' : ''}>regex</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="inline-check-row">
+            <input type="checkbox" id="folder-rule-enabled" ${existingRule?.enabled ? 'checked' : ''}>
+            <span>启用该文件夹的自动规则</span>
+          </label>
+          <input type="text" class="persona-input" id="folder-rule-pattern" placeholder="匹配内容：chatId/角色名/关键词..." value="${escapeHtml(existingRule?.pattern || '')}">
         </div>
         <div class="edit-actions-bar">
           <button class="persona-btn" id="profile-save-btn">💾 保存</button>
@@ -745,7 +771,7 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
     const config = loadPersonaAdvancedConfig(avatarId);
     const name = ($('#profile-edit-name', $modal).val() as string | undefined)?.trim();
     if (!name) {
-      toastr.warning('请输入 Profile 名称');
+      toastr.warning('请输入文件夹名称');
       return;
     }
 
@@ -755,12 +781,21 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
       .filter(Boolean);
 
     if (traitIds.length === 0) {
-      toastr.warning('至少选择一个 trait');
+      toastr.warning('文件夹至少选择一个条目');
       return;
     }
 
+    const ruleEnabled = Boolean($('#folder-rule-enabled', $modal).prop('checked'));
+    const ruleScope = (($('#folder-rule-scope', $modal).val() as string | undefined) || 'chat') as 'chat' | 'character';
+    const ruleMode = (($('#folder-rule-mode', $modal).val() as string | undefined) || 'includes') as
+      | 'includes'
+      | 'equals'
+      | 'regex';
+    const rulePattern = ($('#folder-rule-pattern', $modal).val() as string | undefined)?.trim() || '';
+
+    let profileId = existingProfile?.id || '';
     if (existingProfile) {
-      recordPersonaSnapshot(avatarId, `编辑 profile: ${existingProfile.name}`);
+      recordPersonaSnapshot(avatarId, `编辑文件夹: ${existingProfile.name}`);
       const index = config.profiles.findIndex(p => p.id === existingProfile.id);
       if (index !== -1) {
         config.profiles[index] = {
@@ -769,11 +804,13 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
           traitIds,
           updatedAt: Date.now(),
         };
+        profileId = config.profiles[index].id;
       }
     } else {
-      recordPersonaSnapshot(avatarId, '新增 profile');
+      recordPersonaSnapshot(avatarId, '新增条目文件夹');
+      profileId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
       config.profiles.push({
-        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+        id: profileId,
         name,
         traitIds,
         createdAt: Date.now(),
@@ -781,47 +818,77 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
       });
     }
 
+    const ruleIndex = config.rules.findIndex(
+      rule =>
+        rule.profileId === profileId ||
+        (rule.profileIds.length === 1 && rule.profileIds[0] === profileId && rule.traitIds.length === 0),
+    );
+
+    if (ruleEnabled && rulePattern) {
+      const folderRule: PersonaAutoRule = {
+        id: ruleIndex !== -1 ? config.rules[ruleIndex].id : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+        name: `文件夹规则:${name}`,
+        enabled: true,
+        scope: ruleScope,
+        matchMode: ruleMode,
+        pattern: rulePattern,
+        traitIds: [],
+        profileIds: [profileId],
+        profileId,
+        createdAt: ruleIndex !== -1 ? config.rules[ruleIndex].createdAt : Date.now(),
+        updatedAt: Date.now(),
+      };
+      if (ruleIndex !== -1) {
+        config.rules[ruleIndex] = folderRule;
+      } else {
+        config.rules.push(folderRule);
+      }
+    } else if (ruleIndex !== -1) {
+      config.rules.splice(ruleIndex, 1);
+    }
+
     savePersonaAdvancedConfig(avatarId, config);
+    renderPersonaTraits(avatarId);
     renderSnapshotSection(avatarId);
-    await applyComposedDescriptionForAvatar(avatarId, '更新 profile 后自动同步');
-    toastr.success('Profile 已保存');
+    await applyComposedDescriptionForAvatar(avatarId, '更新条目文件夹后自动同步');
+    toastr.success('条目文件夹已保存');
     closeModal();
   });
 }
 
-async function deleteActiveProfile(avatarId: string): Promise<void> {
-  const parentDoc = window.parent.document;
-  const profileId = ($('#persona-profile-select', parentDoc).val() as string | undefined) || '';
+async function deleteActiveProfile(avatarId: string, profileIdInput?: string): Promise<void> {
+  const profileId = (profileIdInput || '').trim();
   if (!profileId) {
-    toastr.warning('请先选择要删除的 Profile');
+    toastr.warning('未指定要删除的条目文件夹');
     return;
   }
 
   const config = loadPersonaAdvancedConfig(avatarId);
   const target = config.profiles.find(p => p.id === profileId);
   if (!target) {
-    toastr.warning('未找到目标 Profile');
+    toastr.warning('未找到目标条目文件夹');
     return;
   }
 
-  if (!confirm(`确定删除 Profile「${target.name}」吗？`)) {
+  if (!confirm(`确定删除条目文件夹「${target.name}」吗？`)) {
     return;
   }
 
-  recordPersonaSnapshot(avatarId, `删除 profile: ${target.name}`);
+  recordPersonaSnapshot(avatarId, `删除文件夹: ${target.name}`);
   config.profiles = config.profiles.filter(p => p.id !== profileId);
-  config.rules = config.rules.map(rule => ({
-    ...rule,
-    profileIds: rule.profileIds.filter(id => id !== profileId),
-    updatedAt: Date.now(),
-  }));
+  config.rules = config.rules.filter(
+    rule =>
+      rule.profileId !== profileId &&
+      !(rule.profileIds.length === 1 && rule.profileIds[0] === profileId && rule.traitIds.length === 0),
+  );
   if (config.activeProfileId === profileId) {
     config.activeProfileId = '';
   }
   savePersonaAdvancedConfig(avatarId, config);
+  renderPersonaTraits(avatarId);
   renderSnapshotSection(avatarId);
-  await applyComposedDescriptionForAvatar(avatarId, '删除 profile 后自动同步');
-  toastr.success('Profile 已删除');
+  await applyComposedDescriptionForAvatar(avatarId, '删除条目文件夹后自动同步');
+  toastr.success('条目文件夹已删除');
 }
 
 // ==================== 自动规则管理 ====================
