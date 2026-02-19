@@ -255,6 +255,7 @@ function createProfileFolderHtml(
   folderRule: PersonaAutoRule | null,
   isManualActive: boolean,
   isAutoActive: boolean,
+  isRuleMatched: boolean,
 ): string {
   const safeName = escapeHtml(profile.name);
   const modeTag = isManualActive
@@ -263,7 +264,7 @@ function createProfileFolderHtml(
       ? '<span class="state-tag auto">规则激活</span>'
       : '<span class="state-tag off">未激活</span>';
   const ruleText = folderRule?.enabled
-    ? `自动规则: ${folderRule.scope}/${folderRule.matchMode} "${escapeHtml(folderRule.pattern)}"`
+    ? `自动规则: ${folderRule.scope}/${folderRule.matchMode} "${escapeHtml(folderRule.pattern)}" <span class="state-tag ${isRuleMatched ? 'auto' : 'off'}">${isRuleMatched ? '已命中' : '未命中'}</span>`
     : '自动规则: 未启用';
 
   return `
@@ -282,8 +283,8 @@ function createProfileFolderHtml(
         <div class="trait-item-desc">${ruleText} | 条目数: ${profile.traitIds.length}</div>
       </div>
       <div class="trait-item-actions">
-        <button class="trait-btn edit folder-btn" data-action="edit">✏️</button>
-        <button class="trait-btn delete folder-btn" data-action="delete">🗑️</button>
+        <button class="trait-btn folder-btn" data-action="edit">✏️</button>
+        <button class="trait-btn folder-btn" data-action="delete">🗑️</button>
       </div>
     </div>
   `;
@@ -420,7 +421,7 @@ function renderPersonaTraits(avatarId: string): void {
   const activation = getPersonaActivationState(avatarId);
   const effectiveTraitIds = new Set(activation.effectiveTraitIds);
   const activeProfileIds = new Set(activation.activeProfileIds);
-  const traitNameMap = new Map(traits.map(t => [t.id, t.name]));
+  const matchedRuleIds = new Set(activation.matchedRuleIds);
 
   container.empty();
   if (traits.length === 0 && config.profiles.length === 0) {
@@ -433,7 +434,8 @@ function renderPersonaTraits(avatarId: string): void {
     const folderRule = findFolderRule(config, profile.id);
     const isManual = config.activeProfileId === profile.id;
     const isAuto = activeProfileIds.has(profile.id) && !isManual;
-    container.append(createProfileFolderHtml(profile, folderRule, isManual, isAuto));
+    const isRuleMatched = Boolean(folderRule?.id && matchedRuleIds.has(folderRule.id));
+    container.append(createProfileFolderHtml(profile, folderRule, isManual, isAuto, isRuleMatched));
 
     const groupedTraits = profile.traitIds
       .map(id => traits.find(trait => trait.id === id))
