@@ -39,6 +39,128 @@ export interface PersonaTrait {
 }
 
 /**
+ * 设定预设（Profile）
+ * 预设本质是多个 trait 的集合，可一键启用
+ */
+export interface PersonaProfile {
+  /** 唯一 ID */
+  id: string;
+  /** 预设名称 */
+  name: string;
+  /** 包含的 trait ID 列表 */
+  traitIds: string[];
+  /** 创建时间 */
+  createdAt: number;
+  /** 更新时间 */
+  updatedAt: number;
+}
+
+export type PersonaRuleScope = 'chat' | 'character';
+export type PersonaRuleMatchMode = 'includes' | 'equals' | 'regex';
+
+/**
+ * 自动启用规则
+ * 命中后可自动启用 trait 或 Profile
+ */
+export interface PersonaAutoRule {
+  /** 唯一 ID */
+  id: string;
+  /** 规则名称 */
+  name: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 匹配对象：聊天或角色 */
+  scope: PersonaRuleScope;
+  /** 匹配方式 */
+  matchMode: PersonaRuleMatchMode;
+  /** 匹配内容 */
+  pattern: string;
+  /** 命中后启用的 trait */
+  traitIds: string[];
+  /** 命中后启用的 profile */
+  profileIds: string[];
+  /** 创建时间 */
+  createdAt: number;
+  /** 更新时间 */
+  updatedAt: number;
+}
+
+/**
+ * Persona 高级配置
+ * 包含预设、规则、当前激活预设
+ */
+export interface PersonaAdvancedConfig {
+  /** 配置版本 */
+  version: number;
+  /** 当前激活预设 ID */
+  activeProfileId?: string;
+  /** 预设列表 */
+  profiles: PersonaProfile[];
+  /** 自动规则列表 */
+  rules: PersonaAutoRule[];
+  /** 更新时间 */
+  updatedAt: number;
+}
+
+/**
+ * 运行时上下文（用于规则匹配）
+ */
+export interface PersonaRuntimeContext {
+  chatId: string;
+  chatName: string;
+  characterId: string;
+  characterName: string;
+}
+
+/**
+ * 自动激活计算结果
+ */
+export interface PersonaActivationState {
+  effectiveTraitIds: string[];
+  activeProfileIds: string[];
+  matchedRuleIds: string[];
+}
+
+/**
+ * 变更保护快照
+ */
+export interface PersonaSnapshot {
+  /** 唯一 ID */
+  id: string;
+  /** 创建时间 */
+  timestamp: number;
+  /** 变更原因 */
+  reason: string;
+  /** 当时的完整描述 */
+  description: string;
+  /** 当时的基础描述 */
+  baseDescription: string;
+  /** 当时的 traits */
+  traits: PersonaTrait[];
+  /** 当时的高级配置 */
+  config: PersonaAdvancedConfig;
+}
+
+/**
+ * 兼容性检查项
+ */
+export interface CompatibilityCheckItem {
+  key: string;
+  ok: boolean;
+  required: boolean;
+  message: string;
+}
+
+/**
+ * 兼容性检查报告
+ */
+export interface CompatibilityCheckReport {
+  ok: boolean;
+  checkedAt: number;
+  items: CompatibilityCheckItem[];
+}
+
+/**
  * 角色设定配置接口
  * 存储某个角色的所有设定条目
  */
@@ -74,3 +196,15 @@ export const PERSONA_BUTTON_TEXT_IN_MENU = '用户角色管理';
 
 /** 角色设定存储键前缀 */
 export const PERSONA_TRAITS_STORAGE_PREFIX = 'tavern_helper_persona_traits_';
+
+/** Persona 高级配置存储键前缀 */
+export const PERSONA_ADVANCED_STORAGE_PREFIX = 'tavern_helper_persona_advanced_';
+
+/** 基础描述存储键前缀 */
+export const PERSONA_BASE_DESC_STORAGE_PREFIX = 'tavern_helper_persona_base_desc_';
+
+/** 变更快照存储键前缀 */
+export const PERSONA_SNAPSHOT_STORAGE_PREFIX = 'tavern_helper_persona_snapshot_';
+
+/** 设定拼装分隔标记 */
+export const PERSONA_TRAIT_SEPARATOR = '--- 角色设定 ---';
