@@ -250,12 +250,32 @@ function findFolderRule(config: ReturnType<typeof loadPersonaAdvancedConfig>, pr
   );
 }
 
+function buildContextBindingPattern(scope: 'chat' | 'character', context = getRuntimeContext()): string {
+  return scope === 'character'
+    ? `${context.characterId} ${context.characterName}`.trim()
+    : `${context.chatId} ${context.chatName}`.trim();
+}
+
+function isFolderRuleBoundToCurrentContext(
+  folderRule: PersonaAutoRule | null,
+  scope: 'chat' | 'character',
+  context = getRuntimeContext(),
+): boolean {
+  const pattern = buildContextBindingPattern(scope, context);
+  if (!folderRule?.enabled || folderRule.scope !== scope || folderRule.matchMode !== 'equals' || !pattern) {
+    return false;
+  }
+  return folderRule.pattern.trim().toLowerCase() === pattern.toLowerCase();
+}
+
 function createProfileFolderHtml(
   profile: PersonaProfile,
   folderRule: PersonaAutoRule | null,
   isManualActive: boolean,
   isAutoActive: boolean,
   isRuleMatched: boolean,
+  isBoundToCurrentChat: boolean,
+  isBoundToCurrentCharacter: boolean,
 ): string {
   const safeName = escapeHtml(profile.name);
   const modeTag = isManualActive
@@ -266,9 +286,12 @@ function createProfileFolderHtml(
   const ruleText = folderRule?.enabled
     ? `自动规则: ${folderRule.scope}/${folderRule.matchMode} "${escapeHtml(folderRule.pattern)}" <span class="state-tag ${isRuleMatched ? 'auto' : 'off'}">${isRuleMatched ? '已命中' : '未命中'}</span>`
     : '自动规则: 未启用';
+  const autoBoundClass = isRuleMatched ? 'auto-bound' : '';
+  const chatBindClass = isBoundToCurrentChat ? 'active' : '';
+  const characterBindClass = isBoundToCurrentCharacter ? 'active' : '';
 
   return `
-    <div class="persona-folder-item" data-profile-id="${escapeHtml(profile.id)}">
+    <div class="persona-folder-item ${autoBoundClass}" data-profile-id="${escapeHtml(profile.id)}">
       <div class="trait-item-main">
         <div class="trait-item-header">
           <div class="trait-item-name">📁 ${safeName}</div>
@@ -283,6 +306,8 @@ function createProfileFolderHtml(
         <div class="trait-item-desc">${ruleText} | 条目数: ${profile.traitIds.length}</div>
       </div>
       <div class="trait-item-actions">
+        <button class="trait-btn folder-btn folder-bind-btn ${chatBindClass}" data-action="bind-chat" title="绑定当前聊天（再次点击取消）">绑聊</button>
+        <button class="trait-btn folder-btn folder-bind-btn ${characterBindClass}" data-action="bind-character" title="绑定当前角色（再次点击取消）">绑角</button>
         <button class="trait-btn folder-btn" data-action="edit">✏️</button>
         <button class="trait-btn folder-btn" data-action="delete">🗑️</button>
       </div>
@@ -419,6 +444,7 @@ function renderPersonaTraits(avatarId: string): void {
   const traits = loadPersonaTraits(avatarId);
   const config = loadPersonaAdvancedConfig(avatarId);
   const activation = getPersonaActivationState(avatarId);
+  const context = getRuntimeContext();
   const effectiveTraitIds = new Set(activation.effectiveTraitIds);
   const activeProfileIds = new Set(activation.activeProfileIds);
   const matchedRuleIds = new Set(activation.matchedRuleIds);
@@ -435,15 +461,28 @@ function renderPersonaTraits(avatarId: string): void {
     const isManual = config.activeProfileId === profile.id;
     const isAuto = activeProfileIds.has(profile.id) && !isManual;
     const isRuleMatched = Boolean(folderRule?.id && matchedRuleIds.has(folderRule.id));
-    container.append(createProfileFolderHtml(profile, folderRule, isManual, isAuto, isRuleMatched));
+    const isBoundToCurrentChat = isFolderRuleBoundToCurrentContext(folderRule, 'chat', context);
+    const isBoundToCurrentCharacter = isFolderRuleBoundToCurrentContext(folderRule, 'character', context);
+    container.append(
+      createProfileFolderHtml(
+        profile,
+        folderRule,
+        isManual,
+        isAuto,
+        isRuleMatched,
+        isBoundToCurrentChat,
+        isBoundToCurrentCharacter,
+      ),
+    );
 
     const groupedTraits = profile.traitIds
       .map(id => traits.find(trait => trait.id === id))
       .filter((trait): trait is PersonaTrait => Boolean(trait));
     for (const trait of groupedTraits) {
+      const nestedAutoBoundClass = isRuleMatched ? ' auto-bound' : '';
       const itemHtml = createPersonaTraitHtml(trait, effectiveTraitIds).replace(
         'class="persona-trait-item',
-        'class="persona-trait-item nested-trait',
+        `class="persona-trait-item nested-trait${nestedAutoBoundClass}`,
       );
       container.append(itemHtml);
     }
@@ -855,6 +894,83 @@ async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile)
   });
 }
 
+async function toggleFolderContextBinding(
+  avatarId: string,
+  profileId: string,
+  scope: 'chat' | 'character',
+): Promise<void> {
+  const config = loadPersonaAdvancedConfig(avatarId);
+  const profile = config.profiles.find(p => p.id === profileId);
+  if (!profile) {
+    toastr.warning('未找到目标条目文件夹');
+    return;
+  }
+
+  const context = getRuntimeContext();
+  const pattern = buildContextBindingPattern(scope, context);
+  if (!pattern) {
+    toastr.warning(scope === 'chat' ? '当前聊天信息不可用，无法绑定' : '当前角色信息不可用，无法绑定');
+    return;
+  }
+
+  const ruleIndex = config.rules.findIndex(
+    rule =>
+      rule.profileId === profileId ||
+      (rule.profileIds.length === 1 && rule.profileIds[0] === profileId && rule.traitIds.length === 0),
+  );
+  const existingRule = ruleIndex !== -1 ? config.rules[ruleIndex] : null;
+  const isSameBinding = Boolean(
+    existingRule?.enabled &&
+      existingRule.scope === scope &&
+      existingRule.matchMode === 'equals' &&
+      existingRule.pattern.trim().toLowerCase() === pattern.toLowerCase(),
+  );
+
+  recordPersonaSnapshot(
+    avatarId,
+    isSameBinding
+      ? `取消${scope === 'chat' ? '聊天' : '角色'}绑定: ${profile.name}`
+      : `绑定${scope === 'chat' ? '聊天' : '角色'}: ${profile.name}`,
+  );
+
+  if (isSameBinding && ruleIndex !== -1) {
+    config.rules.splice(ruleIndex, 1);
+    savePersonaAdvancedConfig(avatarId, config);
+    renderPersonaTraits(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '取消文件夹上下文绑定后自动同步');
+    toastr.success(`已取消「${profile.name}」的${scope === 'chat' ? '聊天' : '角色'}绑定`);
+    return;
+  }
+
+  const now = Date.now();
+  const folderRule: PersonaAutoRule = {
+    id: existingRule?.id || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+    name: `文件夹规则:${profile.name}`,
+    enabled: true,
+    scope,
+    matchMode: 'equals',
+    pattern,
+    traitIds: [],
+    profileIds: [profileId],
+    profileId,
+    createdAt: existingRule?.createdAt || now,
+    updatedAt: now,
+  };
+
+  if (ruleIndex !== -1) {
+    config.rules[ruleIndex] = folderRule;
+  } else {
+    config.rules.push(folderRule);
+  }
+
+  savePersonaAdvancedConfig(avatarId, config);
+  renderPersonaTraits(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '更新文件夹上下文绑定后自动同步');
+  toastr.success(`已将「${profile.name}」绑定到当前${scope === 'chat' ? '聊天' : '角色'}`);
+}
+
 async function deleteActiveProfile(avatarId: string, profileIdInput?: string): Promise<void> {
   const profileId = (profileIdInput || '').trim();
   if (!profileId) {
@@ -1069,6 +1185,10 @@ function bindPanelEvents(): void {
         if (profile) {
           await upsertProfile(avatarId, profile);
         }
+      } else if (action === 'bind-chat') {
+        await toggleFolderContextBinding(avatarId, profileId, 'chat');
+      } else if (action === 'bind-character') {
+        await toggleFolderContextBinding(avatarId, profileId, 'character');
       } else if (action === 'delete') {
         await deleteActiveProfile(avatarId, profileId);
       }
