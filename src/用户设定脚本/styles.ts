@@ -465,6 +465,12 @@ export const styles = `
     margin-bottom: 8px;
   }
 
+  #${PERSONA_PANEL_ID} .trait-item-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   #${PERSONA_PANEL_ID} .trait-item-name {
     font-weight: 500;
     font-size: 14px;
@@ -504,6 +510,203 @@ export const styles = `
   #${PERSONA_PANEL_ID} .trait-btn.delete:hover {
     background: rgba(200, 80, 80, 0.3);
     border-color: #c86060;
+  }
+
+  #${PERSONA_PANEL_ID} .state-tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    line-height: 18px;
+    border: 1px solid transparent;
+  }
+
+  #${PERSONA_PANEL_ID} .state-tag.manual {
+    color: #9ad1ff;
+    border-color: rgba(90, 170, 255, 0.4);
+    background: rgba(90, 170, 255, 0.12);
+  }
+
+  #${PERSONA_PANEL_ID} .state-tag.auto {
+    color: #9ef0af;
+    border-color: rgba(120, 210, 130, 0.45);
+    background: rgba(120, 210, 130, 0.14);
+  }
+
+  #${PERSONA_PANEL_ID} .state-tag.off {
+    color: #bbb;
+    border-color: rgba(180, 180, 180, 0.3);
+    background: rgba(180, 180, 180, 0.08);
+  }
+
+  #${PERSONA_PANEL_ID} .persona-hint-row {
+    margin-top: 8px;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+
+  #${PERSONA_PANEL_ID} .profile-toolbar {
+    display: grid;
+    grid-template-columns: minmax(120px, 1.6fr) repeat(4, minmax(70px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+
+  #${PERSONA_PANEL_ID} .profile-select {
+    min-width: 140px;
+    padding: 7px 10px;
+    min-height: 34px;
+  }
+
+  #${PERSONA_PANEL_ID} .text-note {
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+
+  #${PERSONA_PANEL_ID} .persona-rules-container {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #${PERSONA_PANEL_ID} .persona-rule-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(150, 150, 150, 0.2);
+  }
+
+  #${PERSONA_PANEL_ID} .rule-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-enable {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.9;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-pattern {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.85;
+    word-break: break-all;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-tags {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #${PERSONA_PANEL_ID} .rule-tag {
+    font-size: 11px;
+    border-radius: 999px;
+    padding: 1px 7px;
+    border: 1px solid rgba(120, 120, 120, 0.4);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  #${PERSONA_PANEL_ID} .rule-actions {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  #${PERSONA_PANEL_ID} .compat-status-mini {
+    margin-left: auto;
+    font-size: 12px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    border: 1px solid transparent;
+  }
+
+  #${PERSONA_PANEL_ID} .compat-status-mini.ok {
+    color: #99e0aa;
+    border-color: rgba(80, 180, 90, 0.4);
+    background: rgba(80, 180, 90, 0.15);
+  }
+
+  #${PERSONA_PANEL_ID} .compat-status-mini.warn {
+    color: #ffd08f;
+    border-color: rgba(220, 160, 60, 0.4);
+    background: rgba(220, 160, 60, 0.14);
+  }
+
+  #${PERSONA_PANEL_ID} .persona-compat-details {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  #${PERSONA_PANEL_ID} .compat-item.ok {
+    color: #9ad8a6;
+  }
+
+  #${PERSONA_PANEL_ID} .compat-item.warn {
+    color: #f5cf8d;
+  }
+
+  #${PERSONA_PANEL_ID} .compat-item.danger {
+    color: #ff9a9a;
+  }
+
+  #${PERSONA_PANEL_ID} .checkbox-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(120, 120, 140, 0.4);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  #${PERSONA_PANEL_ID} .inline-check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 13px;
+  }
+
+  #${PERSONA_PANEL_ID} .two-col-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  #${PERSONA_PANEL_ID} .snapshot-list {
+    margin: 0;
+    padding-left: 18px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-size: 12px;
+    line-height: 1.7;
   }
 
   /* ===== 编辑弹窗 ===== */
