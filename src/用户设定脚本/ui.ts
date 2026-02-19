@@ -530,7 +530,7 @@ function updateAutoStatusText(avatarId: string): void {
   const activation = getPersonaActivationState(avatarId);
   const totalTraits = loadPersonaTraits(avatarId).length;
   $status.text(
-    `自动拼装状态: 生效 trait ${activation.effectiveTraitIds.length}/${totalTraits}，生效 profile ${activation.activeProfileIds.length}，命中规则 ${activation.matchedRuleIds.length}`,
+    `自动拼装状态: 生效条目 ${activation.effectiveTraitIds.length}/${totalTraits}，生效文件夹 ${activation.activeProfileIds.length}，命中规则 ${activation.matchedRuleIds.length}`,
   );
 }
 

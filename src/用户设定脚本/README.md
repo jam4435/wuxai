@@ -13,8 +13,8 @@
 - **同步消息** - 将所有用户消息归属到当前 Persona
 - **状态显示** - 显示当前 Persona 状态
 - **角色设定管理** - 每个角色独立的设定列表，开启后自动拼接到人设描述中
-- **规则自动启用** - 按聊天/角色上下文匹配规则，自动启用指定 trait/Profile
-- **设定预设（Profile）** - 将多个 trait 组合为预设，一键激活/取消
+- **规则自动启用（集成到条目文件夹）** - 在文件夹内配置规则，命中后自动激活该组条目
+- **设定预设（条目文件夹）** - 预设以“文件夹”形式管理，文件夹本身就是条目组
 - **变更保护** - 关键变更自动生成快照，支持回滚上一版与查看快照列表
 - **兼容性自检** - 启动和面板内可检查关键 DOM/API 可用性
 
@@ -65,24 +65,24 @@
 ...
 ```
 
-### 设定预设（Profile）
+### 条目文件夹（预设）
 
-1. 在「设定预设（Profile）」中点击「新建」
-2. 选择要纳入预设的 trait
-3. 通过下拉框切换手动激活的 Profile
-4. 规则命中的 Profile 会与手动 Profile 叠加生效
+1. 在「条目与文件夹」中点击「📁 添加文件夹」
+2. 选择要纳入该文件夹的条目
+3. 文件夹行上的「手动」开关可手动激活/取消该组
+4. 文件夹内可直接配置自动规则，命中后自动激活该组
 
-### 规则自动启用
+### 规则自动启用（文件夹内联）
 
-1. 在「规则自动启用」中添加规则
-2. 选择匹配范围（聊天/角色）和匹配方式（includes/equals/regex）
+1. 打开某个文件夹的编辑弹窗
+2. 配置匹配范围（聊天/角色）和匹配方式（includes/equals/regex）
 3. 填写匹配内容（可用 chatId/角色名等）
-4. 选择命中后自动启用的 trait 或 Profile
+4. 启用规则后，命中即自动激活该文件夹中的所有条目
 5. 聊天/角色上下文变化时会自动重算并同步描述
 
 ### 变更保护与回滚
 
-- 会在 trait/Profile/规则/描述等关键变更前自动记录快照
+- 会在 trait/文件夹/文件夹规则/描述等关键变更前自动记录快照
 - 可在「变更保护」中回滚上一版
 - 可查看最近快照历史（时间 + 原因）
 
@@ -100,7 +100,7 @@
 - 样式注入到父文档和 iframe
 - 数据存储在 localStorage 中：
   - `tavern_helper_persona_traits_{avatarId}` - trait 列表
-  - `tavern_helper_persona_advanced_{avatarId}` - Profile + 自动规则 + 当前激活 Profile
+  - `tavern_helper_persona_advanced_{avatarId}` - 文件夹（Profile）+ 文件夹自动规则 + 当前手动激活文件夹
   - `tavern_helper_persona_base_desc_{avatarId}` - 基础描述
   - `tavern_helper_persona_snapshot_{avatarId}` - 变更保护快照
 
@@ -121,9 +121,8 @@
 - `persona-quick-btn` - 扩展菜单按钮
 - `current-persona-name` - 当前 Persona 显示
 - `persona-name-input` - Persona 名称输入框
-- `persona-traits-container` - 角色设定列表容器
-- `persona-profile-select` - Profile 选择器
-- `persona-rules-container` - 自动规则列表容器
+- `persona-traits-container` - 条目/文件夹列表容器
+- `persona-folder-add-btn` - 添加文件夹按钮
 - `persona-snapshot-info` - 变更快照状态
 - `persona-compat-details` - 兼容性自检详情
 
