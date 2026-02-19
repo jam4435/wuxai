@@ -210,3 +210,285 @@ function createPanelHtml(): string {
   `;
 }
 
+function createPersonaItemHtml(persona: PersonaInfo): string {
+  const activeClass = persona.isSelected ? 'active' : '';
+  const lockIcon = persona.isLockedToChat ? '🔒' : persona.isLockedToCharacter ? '🔗' : '';
+  const defaultBadge = persona.isDefault ? '<span class="persona-default-badge">👑</span>' : '';
+  const avatarSrc = persona.avatarId ? `/thumbnail?type=persona&file=${encodeURIComponent(persona.avatarId)}` : '';
+  const defaultBadgeClass = persona.isDefault ? 'has-default-badge' : '';
+  const safeName = escapeHtml(persona.name || '未命名');
+  const safeDesc = escapeHtml(persona.description ? `${persona.description.slice(0, 24)}...` : '无描述');
+
+  return `
+    <div class="persona-list-item ${activeClass}" data-avatar-id="${escapeHtml(persona.avatarId || '')}">
+      <div class="item-avatar-wrapper ${defaultBadgeClass}">
+        ${persona.isDefault ? '<div class="default-avatar-ring"></div>' : ''}
+        <img class="item-avatar" src="${avatarSrc}" alt="${safeName}" onerror="this.src='/public/logo.png'">
+      </div>
+      <div class="item-info">
+        <div class="item-name">${safeName} ${lockIcon} ${defaultBadge}</div>
+        <div class="item-desc">${safeDesc}</div>
+      </div>
+    </div>
+  `;
+}
+
+function createPersonaTraitHtml(trait: PersonaTrait, effectiveTraitIds: Set<string>): string {
+  const isManualEnabled = trait.enabled;
+  const isEffectiveEnabled = effectiveTraitIds.has(trait.id);
+  const isAutoEnabled = isEffectiveEnabled && !isManualEnabled;
+  const enabledClass = isEffectiveEnabled ? 'enabled' : 'disabled';
+  const stateTag = isAutoEnabled
+    ? '<span class="state-tag auto">自动</span>'
+    : isManualEnabled
+      ? '<span class="state-tag manual">手动</span>'
+      : '<span class="state-tag off">关闭</span>';
+  const safeName = escapeHtml(trait.name);
+  const safeDesc = escapeHtml(trait.description || '').slice(0, 80) || '无描述';
+
+  return `
+    <div class="persona-trait-item ${enabledClass}" data-id="${escapeHtml(trait.id)}">
+      <div class="trait-item-main">
+        <div class="trait-item-header">
+          <div class="trait-item-name">${safeName}</div>
+          <div class="trait-item-state">
+            ${stateTag}
+            <input type="checkbox" class="trait-toggle-checkbox" ${isManualEnabled ? 'checked' : ''} title="手动启用/禁用">
+          </div>
+        </div>
+        <div class="trait-item-desc">${safeDesc}</div>
+      </div>
+      <div class="trait-item-actions">
+        <button class="trait-btn edit" data-id="${escapeHtml(trait.id)}" title="编辑">✏️</button>
+        <button class="trait-btn delete" data-id="${escapeHtml(trait.id)}" title="删除">🗑️</button>
+      </div>
+    </div>
+  `;
+}
+
+function createRuleHtml(rule: PersonaAutoRule): string {
+  const safeName = escapeHtml(rule.name);
+  const safePattern = escapeHtml(rule.pattern || '(空)');
+  const tags = [
+    `<span class="rule-tag">${rule.scope === 'chat' ? '聊天' : '角色'}</span>`,
+    `<span class="rule-tag">${rule.matchMode}</span>`,
+    rule.traitIds.length > 0 ? `<span class="rule-tag">trait:${rule.traitIds.length}</span>` : '',
+    rule.profileIds.length > 0 ? `<span class="rule-tag">profile:${rule.profileIds.length}</span>` : '',
+  ]
+    .filter(Boolean)
+    .join('');
+
+  return `
+    <div class="persona-rule-item" data-rule-id="${escapeHtml(rule.id)}">
+      <div class="rule-main">
+        <div class="rule-title-row">
+          <span class="rule-name">${safeName}</span>
+          <label class="rule-enable">
+            <input type="checkbox" class="rule-enable-checkbox" ${rule.enabled ? 'checked' : ''}>
+            启用
+          </label>
+        </div>
+        <div class="rule-pattern">${safePattern}</div>
+        <div class="rule-tags">${tags}</div>
+      </div>
+      <div class="rule-actions">
+        <button class="trait-btn edit rule-btn" data-action="edit">✏️</button>
+        <button class="trait-btn delete rule-btn" data-action="delete">🗑️</button>
+      </div>
+    </div>
+  `;
+}
+
+// ==================== 面板控制函数 ====================
+
+export function showPanel(): void {
+  const parentDoc = window.parent.document;
+
+  teleportStyle();
+
+  const $container = createScriptIdDiv();
+  $container.html(createPanelHtml());
+  $('body', parentDoc).append($container);
+
+  bindPanelEvents();
+  void renderPersonaList();
+  void updateCurrentPersonaDisplay();
+  refreshCompatibilitySection();
+  lastContextSignature = buildContextSignature();
+
+  console.log('用户设定脚本: 面板已显示');
+}
+
+export function hidePanel(): void {
+  const parentDoc = window.parent.document;
+  const $button = $(`#${PERSONA_BUTTON_ID}`, parentDoc);
+
+  destroyScriptIdDiv();
+  deteleportStyle();
+
+  if ($button.length) {
+    $button.removeClass('active');
+  }
+}
+
+export function togglePanel(): void {
+  const parentDoc = window.parent.document;
+  const $panel = $(`#${PERSONA_PANEL_ID}`, parentDoc);
+  const $button = $(`#${PERSONA_BUTTON_ID}`, parentDoc);
+
+  if ($panel.length > 0) {
+    hidePanel();
+    if ($button.length) {
+      $button.removeClass('active');
+    }
+  } else {
+    showPanel();
+    if ($button.length) {
+      $button.addClass('active');
+    }
+  }
+}
+
+async function renderPersonaList(): Promise<void> {
+  const parentDoc = window.parent.document;
+  const listContainer = $('#persona-list-container', parentDoc);
+  const personas = getPersonaListFromDOM();
+
+  listContainer.empty();
+
+  if (personas.length === 0) {
+    listContainer.html('<div class="empty-list">未找到角色信息</div>');
+    return;
+  }
+
+  personas.forEach(persona => listContainer.append(createPersonaItemHtml(persona)));
+
+  $('.persona-list-item', listContainer)
+    .off(`click${PANEL_EVENT_NAMESPACE}`)
+    .on(`click${PANEL_EVENT_NAMESPACE}`, async function () {
+      const avatarId = ($(this).attr('data-avatar-id') || '').trim();
+      const persona = findPersonaByAvatarId(avatarId);
+      if (!persona || !avatarId) {
+        return;
+      }
+
+      if (!persona.isSelected) {
+        const switched = await selectPersonaInParentUI(avatarId);
+        if (!switched) {
+          return;
+        }
+      }
+
+      $('.persona-list-item', listContainer).removeClass('active');
+      $(`.persona-list-item[data-avatar-id="${avatarId}"]`, listContainer).addClass('active');
+
+      await updateCurrentPersonaDisplay();
+      await selectPersonaForEdit(avatarId);
+    });
+
+  const current = personas.find(p => p.isSelected);
+  if (current?.avatarId) {
+    await selectPersonaForEdit(current.avatarId);
+    $(`.persona-list-item[data-avatar-id="${current.avatarId}"]`, listContainer).addClass('active');
+  } else if (personas[0]?.avatarId) {
+    await selectPersonaForEdit(personas[0].avatarId);
+    $(`.persona-list-item[data-avatar-id="${personas[0].avatarId}"]`, listContainer).addClass('active');
+  }
+}
+
+async function selectPersonaForEdit(avatarId: string): Promise<void> {
+  const parentDoc = window.parent.document;
+  const persona = findPersonaByAvatarId(avatarId);
+  if (!persona || !avatarId) {
+    return;
+  }
+
+  const fallbackDescription = persona.description || '';
+  const baseDescription = loadPersonaBaseDescription(avatarId, extractBaseDescriptionFromComposed(fallbackDescription));
+
+  $('#edit-persona-name', parentDoc).val(persona.name);
+  $('#edit-persona-desc', parentDoc).val(baseDescription);
+  $('#edit-persona-base-desc', parentDoc).val(baseDescription);
+  $('#edit-persona-original-name', parentDoc).val(persona.name);
+  $('#edit-persona-avatar', parentDoc).val(avatarId);
+  $('#persona-name-input', parentDoc).val(persona.name);
+
+  renderPersonaTraits(avatarId);
+  renderProfileSection(avatarId);
+  renderRulesSection(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '切换角色编辑时同步描述');
+}
+
+function renderPersonaTraits(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const container = $('#persona-traits-container', parentDoc);
+  if (!container.length) {
+    return;
+  }
+
+  const traits = loadPersonaTraits(avatarId);
+  const activation = getPersonaActivationState(avatarId);
+  const effectiveTraitIds = new Set(activation.effectiveTraitIds);
+
+  container.empty();
+  if (traits.length === 0) {
+    container.html('<div class="empty-list">暂无设定条目</div>');
+  } else {
+    traits.forEach(trait => container.append(createPersonaTraitHtml(trait, effectiveTraitIds)));
+  }
+
+  updateAutoStatusText(avatarId);
+}
+
+function renderProfileSection(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const $select = $('#persona-profile-select', parentDoc);
+  const $summary = $('#persona-profile-summary', parentDoc);
+
+  const config = loadPersonaAdvancedConfig(avatarId);
+  const traits = loadPersonaTraits(avatarId);
+  const traitNameMap = new Map(traits.map(t => [t.id, t.name]));
+  const activation = getPersonaActivationState(avatarId);
+
+  $select.empty();
+  $select.append('<option value="">(不激活手动 Profile)</option>');
+  for (const profile of config.profiles) {
+    const selected = config.activeProfileId === profile.id ? 'selected' : '';
+    $select.append(`<option value="${escapeHtml(profile.id)}" ${selected}>${escapeHtml(profile.name)}</option>`);
+  }
+
+  if (config.profiles.length === 0) {
+    $summary.text('暂无预设');
+    return;
+  }
+
+  const manualProfile = config.profiles.find(p => p.id === config.activeProfileId);
+  const activeProfiles = config.profiles.filter(p => activation.activeProfileIds.includes(p.id));
+  const activeNames = activeProfiles.map(p => p.name).join('、') || '无';
+  const manualName = manualProfile ? manualProfile.name : '无';
+
+  const firstProfile = manualProfile || config.profiles[0];
+  const traitPreview =
+    firstProfile?.traitIds.map(id => traitNameMap.get(id) || id).slice(0, 6).join('、') ||
+    '该预设没有绑定 trait';
+
+  $summary.html(
+    `手动激活: <b>${escapeHtml(manualName)}</b> | 当前生效: <b>${escapeHtml(activeNames)}</b><br>示例条目: ${escapeHtml(traitPreview)}`,
+  );
+}
+
+function renderRulesSection(avatarId: string): void {
+  const parentDoc = window.parent.document;
+  const container = $('#persona-rules-container', parentDoc);
+  const rules = loadPersonaRules(avatarId);
+
+  container.empty();
+  if (rules.length === 0) {
+    container.html('<div class="empty-list">暂无自动规则</div>');
+    return;
+  }
+
+  rules.forEach(rule => container.append(createRuleHtml(rule)));
+}
+
