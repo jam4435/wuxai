@@ -725,3 +725,302 @@ async function deletePersonaTrait(avatarId: string, traitId: string): Promise<vo
     toastr.success('设定已删除');
   }
 }
+
+// ==================== Profile 管理 ====================
+
+async function upsertProfile(avatarId: string, existingProfile?: PersonaProfile): Promise<void> {
+  const parentDoc = window.parent.document;
+  const traits = loadPersonaTraits(avatarId);
+
+  if (traits.length === 0) {
+    toastr.warning('请先创建至少一个 trait 再设置 Profile');
+    return;
+  }
+
+  const title = existingProfile ? '编辑 Profile' : '新建 Profile';
+  const selectedIds = new Set(existingProfile?.traitIds || []);
+  const traitCheckboxes = traits
+    .map(
+      trait => `
+      <label class="inline-check-row">
+        <input type="checkbox" class="profile-trait-checkbox" value="${escapeHtml(trait.id)}" ${selectedIds.has(trait.id) ? 'checked' : ''}>
+        <span>${escapeHtml(trait.name)}</span>
+      </label>
+    `,
+    )
+    .join('');
+
+  const modalHtml = `
+    <div class="pool-edit-modal">
+      <div class="pool-edit-content">
+        <h3>${title}</h3>
+        <div class="form-group">
+          <label>名称</label>
+          <input type="text" class="persona-input" id="profile-edit-name" value="${escapeHtml(existingProfile?.name || '')}">
+        </div>
+        <div class="form-group">
+          <label>包含的 trait</label>
+          <div class="checkbox-list">${traitCheckboxes}</div>
+        </div>
+        <div class="edit-actions-bar">
+          <button class="persona-btn" id="profile-save-btn">💾 保存</button>
+          <button class="persona-btn" id="profile-close-btn">✖ 关闭</button>
+        </div>
+      </div>
+      <div class="pool-edit-overlay"></div>
+    </div>
+  `;
+
+  const $modal = $(modalHtml).appendTo($('body', parentDoc));
+  const closeModal = () => $modal.remove();
+  $('#profile-close-btn', $modal).on('click', closeModal);
+  $('.pool-edit-overlay', $modal).on('click', closeModal);
+
+  $('#profile-save-btn', $modal).on('click', async () => {
+    const config = loadPersonaAdvancedConfig(avatarId);
+    const name = ($('#profile-edit-name', $modal).val() as string | undefined)?.trim();
+    if (!name) {
+      toastr.warning('请输入 Profile 名称');
+      return;
+    }
+
+    const traitIds = $('.profile-trait-checkbox:checked', $modal)
+      .map((_, el) => ($(el).val() as string | undefined) || '')
+      .get()
+      .filter(Boolean);
+
+    if (traitIds.length === 0) {
+      toastr.warning('至少选择一个 trait');
+      return;
+    }
+
+    if (existingProfile) {
+      recordPersonaSnapshot(avatarId, `编辑 profile: ${existingProfile.name}`);
+      const index = config.profiles.findIndex(p => p.id === existingProfile.id);
+      if (index !== -1) {
+        config.profiles[index] = {
+          ...config.profiles[index],
+          name,
+          traitIds,
+          updatedAt: Date.now(),
+        };
+      }
+    } else {
+      recordPersonaSnapshot(avatarId, '新增 profile');
+      config.profiles.push({
+        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+        name,
+        traitIds,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+
+    savePersonaAdvancedConfig(avatarId, config);
+    renderProfileSection(avatarId);
+    renderRulesSection(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '更新 profile 后自动同步');
+    toastr.success('Profile 已保存');
+    closeModal();
+  });
+}
+
+async function deleteActiveProfile(avatarId: string): Promise<void> {
+  const parentDoc = window.parent.document;
+  const profileId = ($('#persona-profile-select', parentDoc).val() as string | undefined) || '';
+  if (!profileId) {
+    toastr.warning('请先选择要删除的 Profile');
+    return;
+  }
+
+  const config = loadPersonaAdvancedConfig(avatarId);
+  const target = config.profiles.find(p => p.id === profileId);
+  if (!target) {
+    toastr.warning('未找到目标 Profile');
+    return;
+  }
+
+  if (!confirm(`确定删除 Profile「${target.name}」吗？`)) {
+    return;
+  }
+
+  recordPersonaSnapshot(avatarId, `删除 profile: ${target.name}`);
+  config.profiles = config.profiles.filter(p => p.id !== profileId);
+  config.rules = config.rules.map(rule => ({
+    ...rule,
+    profileIds: rule.profileIds.filter(id => id !== profileId),
+    updatedAt: Date.now(),
+  }));
+  if (config.activeProfileId === profileId) {
+    config.activeProfileId = '';
+  }
+  savePersonaAdvancedConfig(avatarId, config);
+  renderProfileSection(avatarId);
+  renderRulesSection(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '删除 profile 后自动同步');
+  toastr.success('Profile 已删除');
+}
+
+// ==================== 自动规则管理 ====================
+
+async function upsertRule(avatarId: string, existingRule?: PersonaAutoRule): Promise<void> {
+  const parentDoc = window.parent.document;
+  const traits = loadPersonaTraits(avatarId);
+  const config = loadPersonaAdvancedConfig(avatarId);
+  const selectedTraitIds = new Set(existingRule?.traitIds || []);
+  const selectedProfileIds = new Set(existingRule?.profileIds || []);
+
+  const traitRows = traits
+    .map(
+      trait => `
+      <label class="inline-check-row">
+        <input type="checkbox" class="rule-trait-checkbox" value="${escapeHtml(trait.id)}" ${selectedTraitIds.has(trait.id) ? 'checked' : ''}>
+        <span>${escapeHtml(trait.name)}</span>
+      </label>
+    `,
+    )
+    .join('');
+  const profileRows = config.profiles
+    .map(
+      profile => `
+      <label class="inline-check-row">
+        <input type="checkbox" class="rule-profile-checkbox" value="${escapeHtml(profile.id)}" ${selectedProfileIds.has(profile.id) ? 'checked' : ''}>
+        <span>${escapeHtml(profile.name)}</span>
+      </label>
+    `,
+    )
+    .join('');
+
+  const title = existingRule ? '编辑自动规则' : '新建自动规则';
+  const modalHtml = `
+    <div class="pool-edit-modal">
+      <div class="pool-edit-content">
+        <h3>${title}</h3>
+        <div class="form-group">
+          <label>规则名称</label>
+          <input type="text" class="persona-input" id="rule-edit-name" value="${escapeHtml(existingRule?.name || '')}">
+        </div>
+        <div class="form-group two-col-grid">
+          <div>
+            <label>匹配范围</label>
+            <select id="rule-edit-scope" class="persona-input">
+              <option value="chat" ${existingRule?.scope === 'chat' || !existingRule ? 'selected' : ''}>聊天</option>
+              <option value="character" ${existingRule?.scope === 'character' ? 'selected' : ''}>角色</option>
+            </select>
+          </div>
+          <div>
+            <label>匹配方式</label>
+            <select id="rule-edit-mode" class="persona-input">
+              <option value="includes" ${existingRule?.matchMode === 'includes' || !existingRule ? 'selected' : ''}>includes</option>
+              <option value="equals" ${existingRule?.matchMode === 'equals' ? 'selected' : ''}>equals</option>
+              <option value="regex" ${existingRule?.matchMode === 'regex' ? 'selected' : ''}>regex</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>匹配内容（可填 chatId/角色名等）</label>
+          <input type="text" class="persona-input" id="rule-edit-pattern" value="${escapeHtml(existingRule?.pattern || '')}">
+        </div>
+        <div class="form-group">
+          <label class="inline-check-row">
+            <input type="checkbox" id="rule-edit-enabled" ${existingRule?.enabled ?? true ? 'checked' : ''}>
+            <span>启用规则</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label>命中后启用的 Profile</label>
+          <div class="checkbox-list">${profileRows || '<div class="text-note">暂无 Profile</div>'}</div>
+        </div>
+        <div class="form-group">
+          <label>命中后启用的 Trait</label>
+          <div class="checkbox-list">${traitRows || '<div class="text-note">暂无 Trait</div>'}</div>
+        </div>
+        <div class="edit-actions-bar">
+          <button class="persona-btn" id="rule-save-btn">💾 保存</button>
+          <button class="persona-btn" id="rule-close-btn">✖ 关闭</button>
+        </div>
+      </div>
+      <div class="pool-edit-overlay"></div>
+    </div>
+  `;
+
+  const $modal = $(modalHtml).appendTo($('body', parentDoc));
+  const closeModal = () => $modal.remove();
+  $('#rule-close-btn', $modal).on('click', closeModal);
+  $('.pool-edit-overlay', $modal).on('click', closeModal);
+
+  $('#rule-save-btn', $modal).on('click', async () => {
+    const name = ($('#rule-edit-name', $modal).val() as string | undefined)?.trim();
+    const scope = (($('#rule-edit-scope', $modal).val() as string | undefined) || 'chat') as 'chat' | 'character';
+    const matchMode = (($('#rule-edit-mode', $modal).val() as string | undefined) || 'includes') as
+      | 'includes'
+      | 'equals'
+      | 'regex';
+    const pattern = ($('#rule-edit-pattern', $modal).val() as string | undefined)?.trim() || '';
+    const enabled = Boolean($('#rule-edit-enabled', $modal).prop('checked'));
+    const profileIds = $('.rule-profile-checkbox:checked', $modal)
+      .map((_, el) => ($(el).val() as string | undefined) || '')
+      .get()
+      .filter(Boolean);
+    const traitIds = $('.rule-trait-checkbox:checked', $modal)
+      .map((_, el) => ($(el).val() as string | undefined) || '')
+      .get()
+      .filter(Boolean);
+
+    if (!name) {
+      toastr.warning('请输入规则名称');
+      return;
+    }
+    if (!pattern) {
+      toastr.warning('请输入匹配内容');
+      return;
+    }
+    if (profileIds.length === 0 && traitIds.length === 0) {
+      toastr.warning('至少选择一个 Profile 或 Trait');
+      return;
+    }
+
+    if (existingRule) {
+      recordPersonaSnapshot(avatarId, `编辑规则: ${existingRule.name}`);
+      const idx = config.rules.findIndex(r => r.id === existingRule.id);
+      if (idx !== -1) {
+        config.rules[idx] = {
+          ...config.rules[idx],
+          name,
+          scope,
+          matchMode,
+          pattern,
+          enabled,
+          profileIds,
+          traitIds,
+          updatedAt: Date.now(),
+        };
+      }
+    } else {
+      recordPersonaSnapshot(avatarId, '新增自动规则');
+      config.rules.push({
+        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+        name,
+        enabled,
+        scope,
+        matchMode,
+        pattern,
+        traitIds,
+        profileIds,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+
+    savePersonaAdvancedConfig(avatarId, config);
+    renderRulesSection(avatarId);
+    renderProfileSection(avatarId);
+    renderPersonaTraits(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '更新自动规则后自动同步');
+    toastr.success('规则已保存');
+    closeModal();
+  });
+}
