@@ -749,6 +749,16 @@ export const styles = `
   .pool-edit-content .persona-textarea {
     min-height: 150px;
   }
+
+  @media (max-width: 900px) {
+    #${PERSONA_PANEL_ID} .profile-toolbar {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #${PERSONA_PANEL_ID} .two-col-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 `;
 
