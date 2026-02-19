@@ -468,6 +468,12 @@ export const styles = `
     border: 1px solid rgba(120, 160, 220, 0.35);
   }
 
+  #${PERSONA_PANEL_ID} .persona-folder-item.auto-bound {
+    border-color: rgba(228, 186, 74, 0.95);
+    box-shadow: inset 3px 0 0 rgba(243, 201, 86, 0.95), 0 0 0 1px rgba(228, 186, 74, 0.35);
+    background: rgba(168, 130, 30, 0.12);
+  }
+
   #${PERSONA_PANEL_ID} .folder-toggle-wrap {
     display: inline-flex;
     align-items: center;
@@ -479,6 +485,11 @@ export const styles = `
   #${PERSONA_PANEL_ID} .nested-trait {
     margin-left: 18px;
     border-left: 2px solid rgba(120, 160, 220, 0.3);
+  }
+
+  #${PERSONA_PANEL_ID} .persona-trait-item.auto-bound {
+    border-left: 3px solid rgba(243, 201, 86, 0.95);
+    box-shadow: inset 2px 0 0 rgba(243, 201, 86, 0.35);
   }
 
   #${PERSONA_PANEL_ID} .persona-trait-item.disabled {
@@ -537,6 +548,17 @@ export const styles = `
 
   #${PERSONA_PANEL_ID} .trait-btn:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  #${PERSONA_PANEL_ID} .folder-bind-btn {
+    min-width: 42px;
+    text-align: center;
+  }
+
+  #${PERSONA_PANEL_ID} .folder-bind-btn.active {
+    color: #ffd86a;
+    border-color: rgba(243, 201, 86, 0.8);
+    background: rgba(168, 130, 30, 0.28);
   }
 
   #${PERSONA_PANEL_ID} .trait-btn.delete:hover {
