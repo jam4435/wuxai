@@ -514,19 +514,31 @@ function renderPersonaTraits(avatarId: string): void {
       .map(id => traits.find(trait => trait.id === id))
       .filter((trait): trait is PersonaTrait => Boolean(trait));
     for (const trait of groupedTraits) {
-      const nestedAutoBoundClass = isRuleMatched ? ' auto-bound' : '';
-      const itemHtml = createPersonaTraitHtml(trait, effectiveTraitIds).replace(
-        'class="persona-trait-item',
-        `class="persona-trait-item nested-trait${nestedAutoBoundClass}`,
+      const traitRule = findTraitRule(config, trait.id);
+      const isTraitRuleMatched = Boolean(traitRule?.id && matchedRuleIds.has(traitRule.id));
+      container.append(
+        createPersonaTraitHtml(trait, effectiveTraitIds, {
+          extraClass: 'nested-trait',
+          isRuleMatched: isRuleMatched || isTraitRuleMatched,
+          isBoundToCurrentChat: isTraitRuleBoundToCurrentContext(traitRule, 'chat', context),
+          isBoundToCurrentCharacter: isTraitRuleBoundToCurrentContext(traitRule, 'character', context),
+        }),
       );
-      container.append(itemHtml);
     }
   }
 
   const groupedTraitIdSet = new Set(config.profiles.flatMap(profile => profile.traitIds));
   const ungroupedTraits = traits.filter(trait => !groupedTraitIdSet.has(trait.id));
   for (const trait of ungroupedTraits) {
-    container.append(createPersonaTraitHtml(trait, effectiveTraitIds));
+    const traitRule = findTraitRule(config, trait.id);
+    const isTraitRuleMatched = Boolean(traitRule?.id && matchedRuleIds.has(traitRule.id));
+    container.append(
+      createPersonaTraitHtml(trait, effectiveTraitIds, {
+        isRuleMatched: isTraitRuleMatched,
+        isBoundToCurrentChat: isTraitRuleBoundToCurrentContext(traitRule, 'chat', context),
+        isBoundToCurrentCharacter: isTraitRuleBoundToCurrentContext(traitRule, 'character', context),
+      }),
+    );
   }
 
   updateAutoStatusText(avatarId);
@@ -1004,6 +1016,81 @@ async function toggleFolderContextBinding(
   renderSnapshotSection(avatarId);
   await applyComposedDescriptionForAvatar(avatarId, '更新文件夹上下文绑定后自动同步');
   toastr.success(`已将「${profile.name}」绑定到当前${scope === 'chat' ? '聊天' : '角色'}`);
+}
+
+async function toggleTraitContextBinding(
+  avatarId: string,
+  traitId: string,
+  scope: 'chat' | 'character',
+): Promise<void> {
+  const traits = loadPersonaTraits(avatarId);
+  const trait = traits.find(t => t.id === traitId);
+  if (!trait) {
+    toastr.warning('未找到目标条目');
+    return;
+  }
+
+  const context = getRuntimeContext();
+  const pattern = buildContextBindingPattern(scope, context);
+  if (!pattern) {
+    toastr.warning(scope === 'chat' ? '当前聊天信息不可用，无法绑定' : '当前角色信息不可用，无法绑定');
+    return;
+  }
+
+  const config = loadPersonaAdvancedConfig(avatarId);
+  const ruleIndex = config.rules.findIndex(
+    rule => rule.traitIds.length === 1 && rule.traitIds[0] === traitId && rule.profileIds.length === 0,
+  );
+  const existingRule = ruleIndex !== -1 ? config.rules[ruleIndex] : null;
+  const isSameBinding = Boolean(
+    existingRule?.enabled &&
+      existingRule.scope === scope &&
+      existingRule.matchMode === 'equals' &&
+      existingRule.pattern.trim().toLowerCase() === pattern.toLowerCase(),
+  );
+
+  recordPersonaSnapshot(
+    avatarId,
+    isSameBinding
+      ? `取消${scope === 'chat' ? '聊天' : '角色'}绑定(条目): ${trait.name}`
+      : `绑定${scope === 'chat' ? '聊天' : '角色'}(条目): ${trait.name}`,
+  );
+
+  if (isSameBinding && ruleIndex !== -1) {
+    config.rules.splice(ruleIndex, 1);
+    savePersonaAdvancedConfig(avatarId, config);
+    renderPersonaTraits(avatarId);
+    renderSnapshotSection(avatarId);
+    await applyComposedDescriptionForAvatar(avatarId, '取消条目上下文绑定后自动同步');
+    toastr.success(`已取消条目「${trait.name}」的${scope === 'chat' ? '聊天' : '角色'}绑定`);
+    return;
+  }
+
+  const now = Date.now();
+  const traitRule: PersonaAutoRule = {
+    id: existingRule?.id || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+    name: `条目规则:${trait.name}`,
+    enabled: true,
+    scope,
+    matchMode: 'equals',
+    pattern,
+    traitIds: [traitId],
+    profileIds: [],
+    createdAt: existingRule?.createdAt || now,
+    updatedAt: now,
+  };
+
+  if (ruleIndex !== -1) {
+    config.rules[ruleIndex] = traitRule;
+  } else {
+    config.rules.push(traitRule);
+  }
+
+  savePersonaAdvancedConfig(avatarId, config);
+  renderPersonaTraits(avatarId);
+  renderSnapshotSection(avatarId);
+  await applyComposedDescriptionForAvatar(avatarId, '更新条目上下文绑定后自动同步');
+  toastr.success(`已将条目「${trait.name}」绑定到当前${scope === 'chat' ? '聊天' : '角色'}`);
 }
 
 async function deleteActiveProfile(avatarId: string, profileIdInput?: string): Promise<void> {
