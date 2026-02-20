@@ -1261,6 +1261,23 @@ function bindPanelEvents(): void {
       }
     });
 
+  $(parentDoc)
+    .off(`click${PANEL_EVENT_NAMESPACE}`, '.trait-bind-btn')
+    .on(`click${PANEL_EVENT_NAMESPACE}`, '.trait-bind-btn', async function () {
+      const avatarId = getEditingAvatarId();
+      const traitId = ($(this).closest('.persona-trait-item').attr('data-id') || '').trim();
+      const action = ($(this).attr('data-action') || '').trim();
+      if (!avatarId || !traitId) {
+        return;
+      }
+
+      if (action === 'bind-chat') {
+        await toggleTraitContextBinding(avatarId, traitId, 'chat');
+      } else if (action === 'bind-character') {
+        await toggleTraitContextBinding(avatarId, traitId, 'character');
+      }
+    });
+
   $('#persona-folder-add-btn', parentDoc).on(`click${PANEL_EVENT_NAMESPACE}`, async () => {
     const avatarId = getEditingAvatarId();
     if (!avatarId) {
