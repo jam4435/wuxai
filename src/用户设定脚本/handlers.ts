@@ -602,6 +602,7 @@ export function getRuntimeContext(): PersonaRuntimeContext {
   let chatName = '';
   let characterId = '';
   let characterName = '';
+  let domChatFilename = '';
 
   try {
     if (maybeSillyTavern?.getCurrentChatId) {
@@ -617,7 +618,17 @@ export function getRuntimeContext(): PersonaRuntimeContext {
     const ctxCharacterName = ensureStringLike(ctx.characterName) || ensureStringLike(ctx.name2);
     const ctxGroupId = ensureStringLike(ctx.groupId);
 
-    chatId = chatId || ctxChatId || ctxChatFile;
+    domChatFilename = getFirstTextBySelector(
+      [
+        '.select_chat_block.selected .select_chat_block_filename.select_chat_block_filename_item',
+        '.select_chat_block.active .select_chat_block_filename.select_chat_block_filename_item',
+        '.select_chat_block_filename.select_chat_block_filename_item',
+      ],
+      parentDoc,
+    );
+
+    // 优先使用前端可见的 chat 文件名，便于绑定规则可读且稳定
+    chatId = domChatFilename || chatId || ctxChatId || ctxChatFile;
     characterId = ctxCharacterId || (ctxGroupId ? `group:${ctxGroupId}` : '');
     characterName = ctxCharacterName;
   } catch (error) {
@@ -635,6 +646,9 @@ export function getRuntimeContext(): PersonaRuntimeContext {
       ],
       parentDoc,
     );
+  }
+  if (!chatName && domChatFilename) {
+    chatName = domChatFilename;
   }
 
   if (!characterName) {
