@@ -10,6 +10,7 @@ import {
   getPersonaActivationState,
   getPersonaListFromDOM,
   getRuntimeContext,
+  getRuntimeContextDebugInfo,
   handleLockToCharacter,
   handleLockToChat,
   handleSyncMessages,
@@ -1390,10 +1391,31 @@ export function initPanel(): void {
 }
 
 async function handleContextChanged(): Promise<void> {
-  const signature = buildContextSignature();
+  const debugInfo = getRuntimeContextDebugInfo();
+  const context = debugInfo.context;
+  const signature = `${context.chatId}|${context.chatName}|${context.characterId}|${context.characterName}`;
   if (signature === lastContextSignature) {
     return;
   }
+
+  const [prevChatId = '', prevChatName = '', prevCharacterId = '', prevCharacterName = ''] =
+    (lastContextSignature || '').split('|');
+  const chatChanged = prevChatId !== context.chatId || prevChatName !== context.chatName;
+  const characterChanged = prevCharacterId !== context.characterId || prevCharacterName !== context.characterName;
+  const switchType = chatChanged && characterChanged ? '聊天+角色' : chatChanged ? '聊天' : characterChanged ? '角色' : '未知';
+
+  console.info('[用户设定脚本] 检测到上下文切换', {
+    switchType,
+    previous: {
+      chatId: prevChatId,
+      chatName: prevChatName,
+      characterId: prevCharacterId,
+      characterName: prevCharacterName,
+    },
+    current: context,
+    source: debugInfo.source,
+  });
+
   lastContextSignature = signature;
 
   const currentPersona = getCurrentPersonaFromDOM();
