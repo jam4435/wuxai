@@ -588,7 +588,17 @@ function getFirstAttrBySelector(selectors: string[], attr: string, doc: Document
   return '';
 }
 
-export function getRuntimeContext(): PersonaRuntimeContext {
+type RuntimeContextDebugInfo = {
+  context: PersonaRuntimeContext;
+  source: {
+    chatId: string;
+    chatName: string;
+    characterId: string;
+    characterName: string;
+  };
+};
+
+function resolveRuntimeContextDebugInfo(): RuntimeContextDebugInfo {
   const parentDoc = getParentDoc();
   const parentWindow = window.parent as unknown as Record<string, unknown>;
   const maybeSillyTavern = (parentWindow.SillyTavern || (window as unknown as Record<string, unknown>).SillyTavern) as
@@ -603,11 +613,19 @@ export function getRuntimeContext(): PersonaRuntimeContext {
   let characterId = '';
   let characterName = '';
   let domChatFilename = '';
+  let chatIdSource = 'unknown';
+  let chatNameSource = 'unknown';
+  let characterIdSource = 'unknown';
+  let characterNameSource = 'unknown';
 
   try {
     if (maybeSillyTavern?.getCurrentChatId) {
       const id = maybeSillyTavern.getCurrentChatId();
-      chatId = id !== undefined && id !== null ? String(id) : '';
+      const value = id !== undefined && id !== null ? String(id) : '';
+      if (value) {
+        chatId = value;
+        chatIdSource = 'sillytavern.getCurrentChatId';
+      }
     }
 
     const ctx = maybeSillyTavern?.getContext?.() || {};
@@ -628,9 +646,29 @@ export function getRuntimeContext(): PersonaRuntimeContext {
     );
 
     // 优先使用前端可见的 chat 文件名，便于绑定规则可读且稳定
-    chatId = domChatFilename || chatId || ctxChatId || ctxChatFile;
-    characterId = ctxCharacterId || (ctxGroupId ? `group:${ctxGroupId}` : '');
-    characterName = ctxCharacterName;
+    if (domChatFilename) {
+      chatId = domChatFilename;
+      chatIdSource = 'dom.select_chat_block_filename';
+    } else if (!chatId && ctxChatId) {
+      chatId = ctxChatId;
+      chatIdSource = 'sillytavern.context.chatId/chat_id';
+    } else if (!chatId && ctxChatFile) {
+      chatId = ctxChatFile;
+      chatIdSource = 'sillytavern.context.chatFile';
+    }
+
+    if (ctxCharacterId) {
+      characterId = ctxCharacterId;
+      characterIdSource = 'sillytavern.context.characterId/chid/this_chid';
+    } else if (ctxGroupId) {
+      characterId = `group:${ctxGroupId}`;
+      characterIdSource = 'sillytavern.context.groupId';
+    }
+
+    if (ctxCharacterName) {
+      characterName = ctxCharacterName;
+      characterNameSource = 'sillytavern.context.characterName/name2';
+    }
   } catch (error) {
     console.warn('用户设定脚本: 获取 SillyTavern 上下文失败', error);
   }
@@ -646,9 +684,13 @@ export function getRuntimeContext(): PersonaRuntimeContext {
       ],
       parentDoc,
     );
+    if (chatName) {
+      chatNameSource = 'dom.chat_selectors';
+    }
   }
   if (!chatName && domChatFilename) {
     chatName = domChatFilename;
+    chatNameSource = 'dom.select_chat_block_filename';
   }
 
   if (!characterName) {
@@ -656,18 +698,53 @@ export function getRuntimeContext(): PersonaRuntimeContext {
       ['#rm_print_characters_block .character_select.selected .ch_name', '#character_name_pole', '#rm_info_block .ch_name'],
       parentDoc,
     );
+    if (characterName) {
+      characterNameSource = 'dom.character_name_selectors';
+    }
   }
 
   if (!characterId) {
     characterId = getFirstAttrBySelector(['#rm_print_characters_block .character_select.selected'], 'data-chid', parentDoc);
+    if (characterId) {
+      characterIdSource = 'dom.selected_character_data_chid';
+    }
+  }
+
+  if (!chatIdSource || chatIdSource === 'unknown') {
+    chatIdSource = 'not_found';
+  }
+  if (!chatNameSource || chatNameSource === 'unknown') {
+    chatNameSource = 'not_found';
+  }
+  if (!characterIdSource || characterIdSource === 'unknown') {
+    characterIdSource = 'not_found';
+  }
+  if (!characterNameSource || characterNameSource === 'unknown') {
+    characterNameSource = 'not_found';
   }
 
   return {
-    chatId,
-    chatName,
-    characterId,
-    characterName,
+    context: {
+      chatId,
+      chatName,
+      characterId,
+      characterName,
+    },
+    source: {
+      chatId: chatIdSource,
+      chatName: chatNameSource,
+      characterId: characterIdSource,
+      characterName: characterNameSource,
+    },
   };
+}
+
+export function getRuntimeContext(): PersonaRuntimeContext {
+  return resolveRuntimeContextDebugInfo().context;
+}
+
+export function getRuntimeContextDebugInfo(): RuntimeContextDebugInfo {
+  return resolveRuntimeContextDebugInfo();
 }
 
 function isRuleMatched(rule: PersonaAutoRule, context: PersonaRuntimeContext): boolean {
