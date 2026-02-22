@@ -104,10 +104,11 @@
 - 通过 `window.parent.document` 访问酒馆主文档
 - 使用 Slash 命令 (`/persona`, `/persona-lock`, `/persona-sync`) 执行操作
 - 样式注入到父文档和 iframe
-- 数据存储在名为 `设定` 的 Persona 描述中（base64 JSON），若不存在会自动创建：
-  - 标记头：`[TH-PERSONA-SCRIPT-STORE-V1]`
-  - 内容：脚本的 traits/baseDescription/advancedConfig/snapshots 全量数据
-  - 写入方式：脚本内存更新后异步回写到该 Persona
+- 数据存储在 localStorage 中：
+  - `tavern_helper_persona_traits_{avatarId}` - trait 列表
+  - `tavern_helper_persona_advanced_{avatarId}` - 文件夹（Profile）+ 文件夹自动规则 + 当前手动激活文件夹
+  - `tavern_helper_persona_base_desc_{avatarId}` - 基础描述
+  - `tavern_helper_persona_snapshot_{avatarId}` - 变更保护快照
 
 ## 📝 相关 Slash 命令
 
