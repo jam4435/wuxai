@@ -391,48 +391,204 @@ async function handlePersonaRenameModal(newName: string): Promise<boolean> {
 
 // ==================== 角色设定存储管理 ====================
 
-function getPersonaTraitStorageKey(avatarId: string): string {
-  return `${PERSONA_TRAITS_STORAGE_PREFIX}${avatarId}`;
+function getDefaultScriptStore(): PersonaScriptStore {
+  return {
+    version: PERSONA_SCRIPT_STORE_VERSION,
+    traitsByAvatar: {},
+    baseDescriptionByAvatar: {},
+    advancedConfigByAvatar: {},
+    snapshotsByAvatar: {},
+    updatedAt: Date.now(),
+  };
+}
+
+function getScriptStorePersona(): PersonaInfo | null {
+  const personas = getPersonaListFromDOM();
+  return personas.find(p => ensureString(p.name).trim() === PERSONA_SCRIPT_STORE_PERSONA_NAME) || null;
+}
+
+function serializeScriptStore(store: PersonaScriptStore): string {
+  const json = JSON.stringify(store);
+  return `${PERSONA_SCRIPT_STORE_MARKER}\n${encodeUtf8Base64(json)}`;
+}
+
+function parseScriptStoreFromDescription(description: string): PersonaScriptStore | null {
+  const text = ensureString(description).trim();
+  if (!text) {
+    return null;
+  }
+
+  const markerIndex = text.indexOf(PERSONA_SCRIPT_STORE_MARKER);
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const payload = text.slice(markerIndex + PERSONA_SCRIPT_STORE_MARKER.length).trim();
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const json = decodeUtf8Base64(payload);
+    const parsed = JSON.parse(json);
+    return normalizeScriptStore(parsed);
+  } catch (error) {
+    console.error('用户设定脚本: 解析“设定”Persona 存储失败', error);
+    return null;
+  }
+}
+
+function normalizeScriptStore(raw: unknown): PersonaScriptStore {
+  const base = getDefaultScriptStore();
+  const parsed = safeRecord(raw);
+  const traitsByAvatarRaw = safeRecord(parsed.traitsByAvatar);
+  const baseDescriptionByAvatarRaw = safeRecord(parsed.baseDescriptionByAvatar);
+  const advancedConfigByAvatarRaw = safeRecord(parsed.advancedConfigByAvatar);
+  const snapshotsByAvatarRaw = safeRecord(parsed.snapshotsByAvatar);
+
+  const traitsByAvatar: Record<string, PersonaTrait[]> = {};
+  for (const [avatarId, value] of Object.entries(traitsByAvatarRaw)) {
+    traitsByAvatar[avatarId] = safeArray<PersonaTrait>(value).map(trait => ({
+      id: ensureString(trait.id),
+      name: ensureString(trait.name) || '未命名设定',
+      description: ensureString(trait.description),
+      enabled: Boolean(trait.enabled),
+      createdAt: typeof trait.createdAt === 'number' ? trait.createdAt : Date.now(),
+      updatedAt: typeof trait.updatedAt === 'number' ? trait.updatedAt : Date.now(),
+    }));
+  }
+
+  const baseDescriptionByAvatar: Record<string, string> = {};
+  for (const [avatarId, value] of Object.entries(baseDescriptionByAvatarRaw)) {
+    baseDescriptionByAvatar[avatarId] = normalizeDescription(ensureString(value));
+  }
+
+  const advancedConfigByAvatar: Record<string, PersonaAdvancedConfig> = {};
+  for (const [avatarId, value] of Object.entries(advancedConfigByAvatarRaw)) {
+    const config = safeRecord(value);
+    const profiles = normalizeProfiles(safeArray<PersonaProfile>(config.profiles));
+    const rules = normalizeRules(safeArray<PersonaAutoRule>(config.rules));
+    const profileIds = new Set(profiles.map(p => p.id));
+    const activeProfileId = ensureString(config.activeProfileId);
+    advancedConfigByAvatar[avatarId] = {
+      version: PERSONA_ADVANCED_CONFIG_VERSION,
+      activeProfileId: activeProfileId && profileIds.has(activeProfileId) ? activeProfileId : '',
+      profiles,
+      rules,
+      updatedAt: typeof config.updatedAt === 'number' ? config.updatedAt : Date.now(),
+    };
+  }
+
+  const snapshotsByAvatar: Record<string, PersonaSnapshot[]> = {};
+  for (const [avatarId, value] of Object.entries(snapshotsByAvatarRaw)) {
+    snapshotsByAvatar[avatarId] = safeArray<PersonaSnapshot>(value);
+  }
+
+  return {
+    version: typeof parsed.version === 'number' ? parsed.version : PERSONA_SCRIPT_STORE_VERSION,
+    traitsByAvatar,
+    baseDescriptionByAvatar,
+    advancedConfigByAvatar,
+    snapshotsByAvatar,
+    updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
+  };
+}
+
+function ensureScriptStoreLoaded(): PersonaScriptStore {
+  if (personaScriptStoreCache) {
+    return personaScriptStoreCache;
+  }
+
+  const storePersona = getScriptStorePersona();
+  if (storePersona?.description) {
+    const parsed = parseScriptStoreFromDescription(storePersona.description);
+    if (parsed) {
+      personaScriptStoreCache = parsed;
+      return personaScriptStoreCache;
+    }
+  }
+
+  personaScriptStoreCache = getDefaultScriptStore();
+  return personaScriptStoreCache;
+}
+
+async function flushScriptStoreToPersona(): Promise<void> {
+  if (!personaScriptStoreCache) {
+    return;
+  }
+  if (personaScriptStoreFlushInProgress) {
+    personaScriptStoreFlushQueued = true;
+    return;
+  }
+
+  personaScriptStoreFlushInProgress = true;
+  try {
+    const storePersona = getScriptStorePersona();
+    if (!storePersona?.avatarId) {
+      if (!personaScriptStoreMissingPersonaWarned) {
+        personaScriptStoreMissingPersonaWarned = true;
+        console.warn(`用户设定脚本: 找不到名为「${PERSONA_SCRIPT_STORE_PERSONA_NAME}」的 Persona，无法持久化脚本设定`);
+      }
+      return;
+    }
+
+    const parentDoc = getParentDoc();
+    const currentAvatarId = getCurrentPersonaFromDOM()?.avatarId || '';
+    const payload = serializeScriptStore(personaScriptStoreCache);
+
+    const selected = await selectPersonaInParentUI(storePersona.avatarId);
+    if (!selected) {
+      console.warn('用户设定脚本: 无法切换到“设定”Persona，跳过持久化');
+      return;
+    }
+
+    const $personaDescription = $('#persona_description', parentDoc);
+    if ($personaDescription.length > 0) {
+      const currentDescription = ensureString(($personaDescription.val() as string | undefined) || '');
+      if (currentDescription.trim() !== payload.trim()) {
+        $personaDescription.val(payload).trigger('input').trigger('blur');
+      }
+    }
+
+    if (currentAvatarId && currentAvatarId !== storePersona.avatarId) {
+      await selectPersonaInParentUI(currentAvatarId);
+    }
+  } catch (error) {
+    console.error('用户设定脚本: 持久化到“设定”Persona 失败', error);
+  } finally {
+    personaScriptStoreFlushInProgress = false;
+    if (personaScriptStoreFlushQueued) {
+      personaScriptStoreFlushQueued = false;
+      void flushScriptStoreToPersona();
+    }
+  }
+}
+
+function markScriptStoreDirty(): void {
+  const store = ensureScriptStoreLoaded();
+  store.updatedAt = Date.now();
+  if (personaScriptStoreFlushTimer) {
+    clearTimeout(personaScriptStoreFlushTimer);
+  }
+  personaScriptStoreFlushTimer = setTimeout(() => {
+    personaScriptStoreFlushTimer = null;
+    void flushScriptStoreToPersona();
+  }, PERSONA_SCRIPT_STORE_FLUSH_DEBOUNCE_MS);
 }
 
 export function loadPersonaTraits(avatarId: string): PersonaTrait[] {
-  try {
-    const key = getPersonaTraitStorageKey(avatarId);
-    const data = localStorage.getItem(key);
-    if (data) {
-      const parsed = JSON.parse(data);
-      return safeArray<PersonaTrait>(parsed).map(trait => ({
-        id: ensureString(trait.id),
-        name: ensureString(trait.name) || '未命名设定',
-        description: ensureString(trait.description),
-        enabled: Boolean(trait.enabled),
-        createdAt: typeof trait.createdAt === 'number' ? trait.createdAt : Date.now(),
-        updatedAt: typeof trait.updatedAt === 'number' ? trait.updatedAt : Date.now(),
-      }));
-    }
-  } catch (error) {
-    console.error('用户设定脚本: 加载角色设定失败', error);
-  }
-  return [];
+  const store = ensureScriptStoreLoaded();
+  return deepClone(store.traitsByAvatar[avatarId] || []);
 }
 
 export function savePersonaTraits(avatarId: string, traits: PersonaTrait[]): boolean {
-  try {
-    const key = getPersonaTraitStorageKey(avatarId);
-    localStorage.setItem(key, JSON.stringify(traits));
-    return true;
-  } catch (error) {
-    console.error('用户设定脚本: 保存角色设定失败', error);
-    toastr.error('保存角色设定失败');
-    return false;
-  }
+  const store = ensureScriptStoreLoaded();
+  store.traitsByAvatar[avatarId] = deepClone(traits);
+  markScriptStoreDirty();
+  return true;
 }
 
 // ==================== 基础描述存储 ====================
-
-function getPersonaBaseDescriptionStorageKey(avatarId: string): string {
-  return `${PERSONA_BASE_DESC_STORAGE_PREFIX}${avatarId}`;
-}
 
 export function extractBaseDescriptionFromComposed(description: string): string {
   const normalized = normalizeDescription(description);
@@ -444,14 +600,10 @@ export function extractBaseDescriptionFromComposed(description: string): string 
 }
 
 export function loadPersonaBaseDescription(avatarId: string, fallbackDescription: string = ''): string {
-  try {
-    const key = getPersonaBaseDescriptionStorageKey(avatarId);
-    const cached = localStorage.getItem(key);
-    if (cached !== null) {
-      return cached;
-    }
-  } catch (error) {
-    console.error('用户设定脚本: 读取基础描述失败', error);
+  const store = ensureScriptStoreLoaded();
+  const cached = store.baseDescriptionByAvatar[avatarId];
+  if (typeof cached === 'string') {
+    return cached;
   }
 
   const extracted = extractBaseDescriptionFromComposed(fallbackDescription);
@@ -462,21 +614,13 @@ export function loadPersonaBaseDescription(avatarId: string, fallbackDescription
 }
 
 export function savePersonaBaseDescription(avatarId: string, baseDescription: string): boolean {
-  try {
-    const key = getPersonaBaseDescriptionStorageKey(avatarId);
-    localStorage.setItem(key, normalizeDescription(baseDescription));
-    return true;
-  } catch (error) {
-    console.error('用户设定脚本: 保存基础描述失败', error);
-    return false;
-  }
+  const store = ensureScriptStoreLoaded();
+  store.baseDescriptionByAvatar[avatarId] = normalizeDescription(baseDescription);
+  markScriptStoreDirty();
+  return true;
 }
 
 // ==================== 高级配置（Profile + Rule） ====================
-
-function getPersonaAdvancedStorageKey(avatarId: string): string {
-  return `${PERSONA_ADVANCED_STORAGE_PREFIX}${avatarId}`;
-}
 
 function getDefaultAdvancedConfig(): PersonaAdvancedConfig {
   return {
@@ -519,53 +663,30 @@ export function loadPersonaAdvancedConfig(avatarId: string): PersonaAdvancedConf
   if (!avatarId) {
     return defaultConfig;
   }
-
-  try {
-    const key = getPersonaAdvancedStorageKey(avatarId);
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      return defaultConfig;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<PersonaAdvancedConfig>;
-    const profiles = normalizeProfiles(safeArray<PersonaProfile>(parsed.profiles));
-    const rules = normalizeRules(safeArray<PersonaAutoRule>(parsed.rules));
-    const profileIds = new Set(profiles.map(p => p.id));
-    const activeProfileId = ensureString(parsed.activeProfileId);
-
-    return {
-      version: PERSONA_ADVANCED_CONFIG_VERSION,
-      activeProfileId: activeProfileId && profileIds.has(activeProfileId) ? activeProfileId : '',
-      profiles,
-      rules,
-      updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
-    };
-  } catch (error) {
-    console.error('用户设定脚本: 加载高级配置失败', error);
+  const store = ensureScriptStoreLoaded();
+  const config = store.advancedConfigByAvatar[avatarId];
+  if (!config) {
     return defaultConfig;
   }
+  return deepClone(config);
 }
 
 export function savePersonaAdvancedConfig(avatarId: string, config: PersonaAdvancedConfig): boolean {
   if (!avatarId) {
     return false;
   }
-  try {
-    const safeConfig: PersonaAdvancedConfig = {
-      version: PERSONA_ADVANCED_CONFIG_VERSION,
-      activeProfileId: ensureString(config.activeProfileId),
-      profiles: normalizeProfiles(config.profiles),
-      rules: normalizeRules(config.rules),
-      updatedAt: Date.now(),
-    };
-    const key = getPersonaAdvancedStorageKey(avatarId);
-    localStorage.setItem(key, JSON.stringify(safeConfig));
-    return true;
-  } catch (error) {
-    console.error('用户设定脚本: 保存高级配置失败', error);
-    toastr.error('保存规则/预设失败');
-    return false;
-  }
+
+  const safeConfig: PersonaAdvancedConfig = {
+    version: PERSONA_ADVANCED_CONFIG_VERSION,
+    activeProfileId: ensureString(config.activeProfileId),
+    profiles: normalizeProfiles(config.profiles),
+    rules: normalizeRules(config.rules),
+    updatedAt: Date.now(),
+  };
+  const store = ensureScriptStoreLoaded();
+  store.advancedConfigByAvatar[avatarId] = deepClone(safeConfig);
+  markScriptStoreDirty();
+  return true;
 }
 
 export function loadPersonaProfiles(avatarId: string): PersonaProfile[] {
@@ -921,34 +1042,16 @@ export async function getCurrentPersonaFullDescription(): Promise<string> {
 
 // ==================== 变更保护（快照） ====================
 
-function getPersonaSnapshotStorageKey(avatarId: string): string {
-  return `${PERSONA_SNAPSHOT_STORAGE_PREFIX}${avatarId}`;
-}
-
 export function loadPersonaSnapshots(avatarId: string): PersonaSnapshot[] {
-  try {
-    const key = getPersonaSnapshotStorageKey(avatarId);
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return safeArray<PersonaSnapshot>(parsed);
-  } catch (error) {
-    console.error('用户设定脚本: 加载快照失败', error);
-    return [];
-  }
+  const store = ensureScriptStoreLoaded();
+  return deepClone(store.snapshotsByAvatar[avatarId] || []);
 }
 
 function savePersonaSnapshots(avatarId: string, snapshots: PersonaSnapshot[]): boolean {
-  try {
-    const key = getPersonaSnapshotStorageKey(avatarId);
-    localStorage.setItem(key, JSON.stringify(snapshots));
-    return true;
-  } catch (error) {
-    console.error('用户设定脚本: 保存快照失败', error);
-    return false;
-  }
+  const store = ensureScriptStoreLoaded();
+  store.snapshotsByAvatar[avatarId] = deepClone(snapshots);
+  markScriptStoreDirty();
+  return true;
 }
 
 /**
