@@ -5,6 +5,10 @@
 import {
   CompatibilityCheckItem,
   CompatibilityCheckReport,
+  PERSONA_ADVANCED_STORAGE_PREFIX,
+  PERSONA_BASE_DESC_STORAGE_PREFIX,
+  PERSONA_SNAPSHOT_STORAGE_PREFIX,
+  PERSONA_TRAITS_STORAGE_PREFIX,
   PERSONA_TRAIT_SEPARATOR,
   PersonaActivationState,
   PersonaAdvancedConfig,

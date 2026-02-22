@@ -10,7 +10,6 @@ import {
   getPersonaActivationState,
   getPersonaListFromDOM,
   getRuntimeContext,
-  getRuntimeContextDebugInfo,
   handleLockToCharacter,
   handleLockToChat,
   handleSyncMessages,
@@ -44,8 +43,7 @@ import {
 import { injectStyles, styles } from './styles';
 
 const PANEL_EVENT_NAMESPACE = '.persona-panel-events';
-let contextEventWatchers: EventOnReturn[] = [];
-let contextEventRetryTimers = new Set<ReturnType<typeof setTimeout>>();
+let contextWatcherTimer: ReturnType<typeof setInterval> | null = null;
 let lastContextSignature = '';
 let baseDescDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCompatibilityReport: CompatibilityCheckReport | null = null;
@@ -1391,53 +1389,11 @@ export function initPanel(): void {
   }
 }
 
-function clearContextEventRetryTimers(): void {
-  for (const timer of contextEventRetryTimers) {
-    clearTimeout(timer);
-  }
-  contextEventRetryTimers.clear();
-}
-
-function scheduleContextChecksFromEvent(source: string, payload?: unknown): void {
-  clearContextEventRetryTimers();
-  const retryDelays = [0, 120, 400];
-  for (const delay of retryDelays) {
-    const timer = setTimeout(() => {
-      contextEventRetryTimers.delete(timer);
-      void handleContextChanged(`event:${source}@${delay}ms`, payload);
-    }, delay);
-    contextEventRetryTimers.add(timer);
-  }
-}
-
-async function handleContextChanged(triggerSource = 'event', triggerPayload?: unknown): Promise<void> {
-  const debugInfo = getRuntimeContextDebugInfo();
-  const context = debugInfo.context;
-  const signature = `${context.chatId}|${context.chatName}|${context.characterId}|${context.characterName}`;
+async function handleContextChanged(): Promise<void> {
+  const signature = buildContextSignature();
   if (signature === lastContextSignature) {
     return;
   }
-
-  const [prevChatId = '', prevChatName = '', prevCharacterId = '', prevCharacterName = ''] =
-    (lastContextSignature || '').split('|');
-  const chatChanged = prevChatId !== context.chatId || prevChatName !== context.chatName;
-  const characterChanged = prevCharacterId !== context.characterId || prevCharacterName !== context.characterName;
-  const switchType = chatChanged && characterChanged ? '聊天+角色' : chatChanged ? '聊天' : characterChanged ? '角色' : '未知';
-
-  console.info('[用户设定脚本] 检测到上下文切换', {
-    triggerSource,
-    switchType,
-    previous: {
-      chatId: prevChatId,
-      chatName: prevChatName,
-      characterId: prevCharacterId,
-      characterName: prevCharacterName,
-    },
-    current: context,
-    source: debugInfo.source,
-    triggerPayload,
-  });
-
   lastContextSignature = signature;
 
   const currentPersona = getCurrentPersonaFromDOM();
@@ -1453,42 +1409,15 @@ async function handleContextChanged(triggerSource = 'event', triggerPayload?: un
   }
 }
 
-function startContextEventWatcher(): void {
-  if (contextEventWatchers.length > 0) {
+function startContextWatcher(): void {
+  if (contextWatcherTimer) {
     return;
   }
 
-  if (typeof eventOn !== 'function' || typeof tavern_events === 'undefined') {
-    console.warn('[用户设定脚本] 事件监听不可用，自动绑定检测将不可用');
-    return;
-  }
-
-  try {
-    const chatChangedWatcher = eventOn(tavern_events.CHAT_CHANGED, chatFileName => {
-      console.info('[用户设定脚本] 收到 CHAT_CHANGED 事件', { chatFileName });
-      scheduleContextChecksFromEvent('CHAT_CHANGED', { chatFileName });
-    });
-    contextEventWatchers.push(chatChangedWatcher);
-  } catch (error) {
-    console.warn('[用户设定脚本] 注册 CHAT_CHANGED 监听失败', error);
-  }
-
-  try {
-    const characterChangedWatcher = eventOn(tavern_events.CHARACTER_PAGE_LOADED, () => {
-      console.info('[用户设定脚本] 收到 CHARACTER_PAGE_LOADED 事件');
-      scheduleContextChecksFromEvent('CHARACTER_PAGE_LOADED');
-    });
-    contextEventWatchers.push(characterChangedWatcher);
-  } catch (error) {
-    console.warn('[用户设定脚本] 注册 CHARACTER_PAGE_LOADED 监听失败', error);
-  }
-
-  if (contextEventWatchers.length > 0) {
-    console.info('[用户设定脚本] 已启用事件监听上下文检测', {
-      watchers: contextEventWatchers.length,
-    });
-    scheduleContextChecksFromEvent('INIT');
-  }
+  lastContextSignature = buildContextSignature();
+  contextWatcherTimer = setInterval(() => {
+    void handleContextChanged();
+  }, 1800);
 }
 
 export function bindEventListeners(): void {
@@ -1501,8 +1430,7 @@ export function bindEventListeners(): void {
       togglePanel();
     });
 
-  lastContextSignature = buildContextSignature();
-  startContextEventWatcher();
+  startContextWatcher();
 }
 
 export function injectStylesToIframe(): void {
