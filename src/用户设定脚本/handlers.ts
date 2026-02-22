@@ -22,6 +22,25 @@ declare function triggerSlash(command: string): Promise<string>;
 const PERSONA_ADVANCED_CONFIG_VERSION = 1;
 const SNAPSHOT_MAX_COUNT = 30;
 const SNAPSHOT_MIN_INTERVAL_MS = 4000;
+const PERSONA_SCRIPT_STORE_VERSION = 1;
+const PERSONA_SCRIPT_STORE_PERSONA_NAME = '设定';
+const PERSONA_SCRIPT_STORE_MARKER = '[TH-PERSONA-SCRIPT-STORE-V1]';
+const PERSONA_SCRIPT_STORE_FLUSH_DEBOUNCE_MS = 1200;
+
+type PersonaScriptStore = {
+  version: number;
+  traitsByAvatar: Record<string, PersonaTrait[]>;
+  baseDescriptionByAvatar: Record<string, string>;
+  advancedConfigByAvatar: Record<string, PersonaAdvancedConfig>;
+  snapshotsByAvatar: Record<string, PersonaSnapshot[]>;
+  updatedAt: number;
+};
+
+let personaScriptStoreCache: PersonaScriptStore | null = null;
+let personaScriptStoreFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let personaScriptStoreFlushInProgress = false;
+let personaScriptStoreFlushQueued = false;
+let personaScriptStoreMissingPersonaWarned = false;
 
 function createId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
@@ -33,6 +52,10 @@ function deepClone<T>(value: T): T {
 
 function safeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function safeRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function getParentDoc(): Document {
@@ -55,6 +78,24 @@ function ensureStringLike(value: unknown): string {
 
 function normalizeDescription(description: string): string {
   return description.replace(/\r\n/g, '\n').trim();
+}
+
+function encodeUtf8Base64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function decodeUtf8Base64(value: string): string {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 // ==================== Persona 数据获取函数 ====================
