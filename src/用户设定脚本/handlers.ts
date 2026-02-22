@@ -621,6 +621,19 @@ function ensureScriptStoreLoaded(): PersonaScriptStore {
   return personaScriptStoreCache;
 }
 
+export async function ensureScriptStorePersonaReady(): Promise<boolean> {
+  ensureScriptStoreLoaded();
+  const storePersona = await ensureScriptStorePersona();
+  if (!storePersona?.avatarId) {
+    return false;
+  }
+
+  if (!parseScriptStoreFromDescription(storePersona.description || '')) {
+    markScriptStoreDirty();
+  }
+  return true;
+}
+
 async function flushScriptStoreToPersona(): Promise<void> {
   if (!personaScriptStoreCache) {
     return;

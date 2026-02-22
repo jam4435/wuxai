@@ -10,6 +10,7 @@
  */
 
 import { bindEventListeners, initPanel, injectStylesToIframe } from './ui';
+import { ensureScriptStorePersonaReady } from './handlers';
 
 // ==================== 初始化 ====================
 
@@ -27,6 +28,11 @@ function initialize(): void {
 
   // 3. 绑定事件，让点击按钮能触发相应功能
   bindEventListeners();
+
+  // 4. 启动后尝试自动准备“设定”Persona（缺失时创建）
+  setTimeout(() => {
+    void ensureScriptStorePersonaReady();
+  }, 1200);
 
   console.log('用户设定脚本: 初始化完成');
 }
