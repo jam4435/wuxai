@@ -26,6 +26,7 @@ const PERSONA_SCRIPT_STORE_VERSION = 1;
 const PERSONA_SCRIPT_STORE_PERSONA_NAME = '设定';
 const PERSONA_SCRIPT_STORE_MARKER = '[TH-PERSONA-SCRIPT-STORE-V1]';
 const PERSONA_SCRIPT_STORE_FLUSH_DEBOUNCE_MS = 1200;
+const PERSONA_SCRIPT_STORE_CREATE_RETRY_INTERVAL_MS = 15000;
 
 type PersonaScriptStore = {
   version: number;
@@ -41,6 +42,8 @@ let personaScriptStoreFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let personaScriptStoreFlushInProgress = false;
 let personaScriptStoreFlushQueued = false;
 let personaScriptStoreMissingPersonaWarned = false;
+let personaScriptStoreCreateInProgress = false;
+let personaScriptStoreLastCreateAttemptAt = 0;
 
 function createId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
