@@ -632,7 +632,8 @@ async function flushScriptStoreToPersona(): Promise<void> {
 
   personaScriptStoreFlushInProgress = true;
   try {
-    const storePersona = getScriptStorePersona();
+    const currentAvatarId = getCurrentPersonaFromDOM()?.avatarId || '';
+    const storePersona = await ensureScriptStorePersona();
     if (!storePersona?.avatarId) {
       if (!personaScriptStoreMissingPersonaWarned) {
         personaScriptStoreMissingPersonaWarned = true;
@@ -642,7 +643,6 @@ async function flushScriptStoreToPersona(): Promise<void> {
     }
 
     const parentDoc = getParentDoc();
-    const currentAvatarId = getCurrentPersonaFromDOM()?.avatarId || '';
     const payload = serializeScriptStore(personaScriptStoreCache);
 
     const selected = await selectPersonaInParentUI(storePersona.avatarId);
