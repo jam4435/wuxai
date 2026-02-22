@@ -44,7 +44,6 @@ import {
 import { injectStyles, styles } from './styles';
 
 const PANEL_EVENT_NAMESPACE = '.persona-panel-events';
-let contextWatcherTimer: ReturnType<typeof setInterval> | null = null;
 let contextEventWatchers: EventOnReturn[] = [];
 let contextEventRetryTimers = new Set<ReturnType<typeof setTimeout>>();
 let lastContextSignature = '';
@@ -1411,7 +1410,7 @@ function scheduleContextChecksFromEvent(source: string, payload?: unknown): void
   }
 }
 
-async function handleContextChanged(triggerSource = 'poll', triggerPayload?: unknown): Promise<void> {
+async function handleContextChanged(triggerSource = 'event', triggerPayload?: unknown): Promise<void> {
   const debugInfo = getRuntimeContextDebugInfo();
   const context = debugInfo.context;
   const signature = `${context.chatId}|${context.chatName}|${context.characterId}|${context.characterName}`;
@@ -1454,25 +1453,13 @@ async function handleContextChanged(triggerSource = 'poll', triggerPayload?: unk
   }
 }
 
-function startContextWatcher(): void {
-  if (contextWatcherTimer) {
-    return;
-  }
-
-  lastContextSignature = buildContextSignature();
-  startContextEventWatcher();
-  contextWatcherTimer = setInterval(() => {
-    void handleContextChanged('poll');
-  }, 1800);
-}
-
 function startContextEventWatcher(): void {
   if (contextEventWatchers.length > 0) {
     return;
   }
 
   if (typeof eventOn !== 'function' || typeof tavern_events === 'undefined') {
-    console.warn('[用户设定脚本] 事件监听不可用，继续使用轮询模式');
+    console.warn('[用户设定脚本] 事件监听不可用，自动绑定检测将不可用');
     return;
   }
 
@@ -1500,6 +1487,7 @@ function startContextEventWatcher(): void {
     console.info('[用户设定脚本] 已启用事件监听上下文检测', {
       watchers: contextEventWatchers.length,
     });
+    scheduleContextChecksFromEvent('INIT');
   }
 }
 
@@ -1513,7 +1501,8 @@ export function bindEventListeners(): void {
       togglePanel();
     });
 
-  startContextWatcher();
+  lastContextSignature = buildContextSignature();
+  startContextEventWatcher();
 }
 
 export function injectStylesToIframe(): void {
