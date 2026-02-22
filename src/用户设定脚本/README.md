@@ -104,7 +104,7 @@
 - 通过 `window.parent.document` 访问酒馆主文档
 - 使用 Slash 命令 (`/persona`, `/persona-lock`, `/persona-sync`) 执行操作
 - 样式注入到父文档和 iframe
-- 数据存储在名为 `设定` 的 Persona 描述中（base64 JSON）：
+- 数据存储在名为 `设定` 的 Persona 描述中（base64 JSON），若不存在会自动创建：
   - 标记头：`[TH-PERSONA-SCRIPT-STORE-V1]`
   - 内容：脚本的 traits/baseDescription/advancedConfig/snapshots 全量数据
   - 写入方式：脚本内存更新后异步回写到该 Persona
