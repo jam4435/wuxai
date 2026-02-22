@@ -410,6 +410,112 @@ function getScriptStorePersona(): PersonaInfo | null {
   return personas.find(p => ensureString(p.name).trim() === PERSONA_SCRIPT_STORE_PERSONA_NAME) || null;
 }
 
+async function createScriptStorePersonaViaDOM(): Promise<PersonaInfo | null> {
+  const parentDoc = getParentDoc();
+  const currentAvatarId = getCurrentPersonaFromDOM()?.avatarId || '';
+  const avatarIdsBefore = new Set(
+    getPersonaListFromDOM()
+      .map(p => ensureString(p.avatarId).trim())
+      .filter(Boolean),
+  );
+
+  let $createBtn = $('#create_dummy_persona', parentDoc).first();
+  if ($createBtn.length === 0) {
+    const $personaManagerToggle = $('.drawer-icon.fa-face-smile', parentDoc).first();
+    if ($personaManagerToggle.length > 0) {
+      $personaManagerToggle.trigger('click');
+      await new Promise(resolve => setTimeout(resolve, 180));
+      $createBtn = $('#create_dummy_persona', parentDoc).first();
+    }
+  }
+
+  if ($createBtn.length === 0) {
+    console.warn(`用户设定脚本: 找不到 #create_dummy_persona，无法自动创建「${PERSONA_SCRIPT_STORE_PERSONA_NAME}」Persona`);
+    return null;
+  }
+
+  $createBtn.trigger('click');
+  await new Promise(resolve => setTimeout(resolve, 260));
+
+  const personasAfterCreate = getPersonaListFromDOM();
+  let createdPersona =
+    personasAfterCreate.find(p => p.avatarId && !avatarIdsBefore.has(ensureString(p.avatarId).trim())) ||
+    personasAfterCreate.find(p => p.isSelected) ||
+    null;
+
+  if (!createdPersona?.avatarId) {
+    console.warn(`用户设定脚本: 点击创建后未识别到新 Persona，无法自动创建「${PERSONA_SCRIPT_STORE_PERSONA_NAME}」`);
+    return null;
+  }
+
+  if (!createdPersona.isSelected) {
+    const selected = await selectPersonaInParentUI(createdPersona.avatarId);
+    if (!selected) {
+      return null;
+    }
+    createdPersona = findPersonaByAvatarId(createdPersona.avatarId);
+  }
+
+  if (ensureString(createdPersona?.name).trim() !== PERSONA_SCRIPT_STORE_PERSONA_NAME) {
+    const $renameBtn = $('#persona_rename_button', parentDoc);
+    if ($renameBtn.length === 0) {
+      console.warn('用户设定脚本: 找不到 #persona_rename_button，无法自动重命名新 Persona');
+    } else {
+      $renameBtn.trigger('click');
+      await handlePersonaRenameModal(PERSONA_SCRIPT_STORE_PERSONA_NAME);
+      await new Promise(resolve => setTimeout(resolve, 220));
+    }
+  }
+
+  const storePersona = getScriptStorePersona();
+  if (!storePersona?.avatarId) {
+    console.warn(`用户设定脚本: 自动创建后仍未找到「${PERSONA_SCRIPT_STORE_PERSONA_NAME}」Persona，请手动检查`);
+    if (currentAvatarId) {
+      await selectPersonaInParentUI(currentAvatarId);
+    }
+    return null;
+  }
+
+  console.info(`用户设定脚本: 已自动创建脚本存储 Persona「${PERSONA_SCRIPT_STORE_PERSONA_NAME}」`, {
+    avatarId: storePersona.avatarId,
+  });
+
+  if (currentAvatarId && currentAvatarId !== storePersona.avatarId) {
+    await selectPersonaInParentUI(currentAvatarId);
+  }
+
+  return storePersona;
+}
+
+async function ensureScriptStorePersona(): Promise<PersonaInfo | null> {
+  const existing = getScriptStorePersona();
+  if (existing?.avatarId) {
+    return existing;
+  }
+
+  if (personaScriptStoreCreateInProgress) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (now - personaScriptStoreLastCreateAttemptAt < PERSONA_SCRIPT_STORE_CREATE_RETRY_INTERVAL_MS) {
+    return null;
+  }
+  personaScriptStoreLastCreateAttemptAt = now;
+  personaScriptStoreCreateInProgress = true;
+
+  try {
+    const created = await createScriptStorePersonaViaDOM();
+    if (created?.avatarId) {
+      personaScriptStoreMissingPersonaWarned = false;
+      return created;
+    }
+    return null;
+  } finally {
+    personaScriptStoreCreateInProgress = false;
+  }
+}
+
 function serializeScriptStore(store: PersonaScriptStore): string {
   const json = JSON.stringify(store);
   return `${PERSONA_SCRIPT_STORE_MARKER}\n${encodeUtf8Base64(json)}`;
